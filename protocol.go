@@ -54,6 +54,10 @@ var (
 	DataRawBytes DataType = 0x00
 )
 
+var (
+	REQ_HEADER_LEN int = 24
+)
+
 type requestHeader struct {
 	magic    MagicType
 	opcode   OpcodeType
