@@ -2,7 +2,7 @@ package gomemcached
 
 import (
 	"bufio"
-	"encoding/binary"
+	"io"
 	"net"
 	"time"
 
@@ -18,8 +18,6 @@ var (
 type Conn struct {
 	conn net.Conn
 	rw   bufio.ReadWriter
-
-	bytesPool *bytepool.Pool
 }
 
 func connect(addr string) (*Conn, error) {
@@ -40,46 +38,25 @@ func connect(addr string) (*Conn, error) {
 		},
 	}
 
-	c.bytesPool = bytepool.New(24, 1024)
 	return c, nil
 }
 
-func (c *Conn) makeResponseHeaderFromConn(data []byte) *responseHeader {
-	return &responseHeader{
-		magic:    (MagicType)(data[0]),
-		opcode:   (OpcodeType)(data[1]),
-		keyLen:   (uint16)(binary.BigEndian.Uint16(data[2:4])),
-		extLen:   (uint8)(data[4]),
-		dataType: (DataType)(data[5]),
-		status:   (StatusType)(binary.BigEndian.Uint16(data[6:8])),
-		bodyLen:  (uint32)(binary.BigEndian.Uint32(data[8:10])),
-		opaque:   (uint32)(binary.BigEndian.Uint32(data[10:12])),
-		cas:      (uint64)(binary.BigEndian.Uint64(data[12:24])),
-	}
+func (c *Conn) flush() error {
+	c.conn.SetWriteDeadline(time.Now().Add(WriterTimeout))
+	return c.rw.Flush()
 }
 
-func (c *Conn) makeRequestHeader2Conn(header *requestHeader) error {
-	b := c.bytesPool.Checkout()
-	defer b.Release()
-
-	b.WriteByte((byte)(header.magic))
-	b.WriteByte((byte)(header.opcode))
-	b.WriteUint16(header.keyLen)
-	b.WriteByte((byte)(header.extLen))
-	b.WriteByte((byte)(header.dataType))
-	b.WriteUint16((uint16)(header.status))
-	b.WriteUint32((uint32)(header.bodyLen))
-	b.WriteUint32((uint32)(header.opaque))
-	b.WriteUint64((uint64)(header.cas))
-
-	len, err := c.rw.Write(b.Bytes())
+func (c *Conn) read(b *bytepool.Bytes) error {
+	c.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	_, err := io.ReadFull(c.rw, b.Bytes())
 	if err != nil {
 		return err
 	}
 
-	if len < REQ_HEADER_LEN {
-		return ErrFillRequestHeaderFailed
-	}
-
 	return nil
+}
+
+func (c *Conn) write(b *bytepool.Bytes) error {
+	_, err := c.rw.Write(b.Bytes())
+	return err
 }

@@ -2,7 +2,7 @@ package gomemcached
 
 import (
 	"sort"
-	"sync"
+	"time"
 )
 
 var (
@@ -11,17 +11,16 @@ var (
 )
 
 type server struct {
-	Addr string
+	Addr      string
+	processer chan *Command
 }
 
 type cluster struct {
 	servers  map[uint32]*server
 	nodeList []uint32
-
-	sync.RWMutex
 }
 
-func createCluster(addrs []string) *cluster {
+func createCluster(addrs []string, maxConnPerServer int) *cluster {
 	cl := &cluster{
 		servers: make(map[uint32]*server),
 	}
@@ -35,16 +34,44 @@ func createCluster(addrs []string) *cluster {
 				cl.servers[hashValue] = s
 			}
 		}
+
+		s.processer = make(chan *Command, maxConnPerServer)
+		for i := 0; i < maxConnPerServer; i++ {
+			conn, err := connect(addr)
+			if err == nil {
+				cmd := newCommand(conn)
+				s.processer <- cmd
+			}
+		}
 	}
 
 	sort.Sort((SortList)(cl.nodeList))
 	return cl
 }
 
-func (c *cluster) FindServerByKey(key string) *server {
-	c.Lock()
-	defer c.Unlock()
+func (s *server) GetCmd() (*Command, error) {
+	if len(s.processer) <= 0 {
+		return nil, ErrNoUsableConnection
+	}
 
+	keepTimer := time.After(time.Second * 1)
+	for {
+		select {
+		case <-keepTimer:
+			return nil, ErrNoUsableConnection
+		case cmd := <-s.processer:
+			return cmd, nil
+		default:
+		}
+	}
+
+	return nil, ErrNoUsableConnection
+}
+func (s *server) PutCmd(cmd *Command) {
+	s.processer <- cmd
+}
+
+func (c *cluster) chooseServer(key string) *server {
 	if len(c.nodeList) < 1 {
 		return nil
 	}
