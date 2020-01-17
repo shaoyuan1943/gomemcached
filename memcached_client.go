@@ -10,43 +10,42 @@ func NewMemcachedClient(addrs []string, maxConnPerServer int) *MemcachedClient {
 	return m
 }
 
-func (m *MemcachedClient) choose(key string) (*Command, error) {
+func (m *MemcachedClient) choose(key string) (*server, *Command, error) {
 	if len(key) <= 0 {
-		return nil, ErrInvalidArguments
+		return nil, nil, ErrInvalidArguments
 	}
 
 	server := m.cluster.chooseServer(key)
 	if server == nil {
-		return nil, ErrNotFoundServerNode
+		return nil, nil, ErrNotFoundServerNode
 	}
 
 	cmd, err := server.GetCmd()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return cmd, nil
+	return server, cmd, nil
 }
 
 func (m *MemcachedClient) Get(key string, value interface{}) (uint64, error) {
-	cmd, err := m.choose(key)
+	server, cmd, err := m.choose(key)
 	if err != nil {
 		return 0, err
 	}
 
 	cas, err := cmd.get(key, value)
-	if err != nil {
-		return 0, err
-	}
-
-	return cas, nil
+	server.PutCmd(cmd)
+	return cas, err
 }
 
 func (m *MemcachedClient) Set(key string, value string, expiration uint32, cas uint64) error {
-	cmd, err := m.choose(key)
+	server, cmd, err := m.choose(key)
 	if err != nil {
 		return err
 	}
 
-	return cmd.set(key, value, expiration, cas)
+	err = cmd.set(key, value, expiration, cas)
+	server.PutCmd(cmd)
+	return err
 }

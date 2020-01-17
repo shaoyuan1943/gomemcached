@@ -46,6 +46,15 @@ func (c *Conn) flush() error {
 	return c.rw.Flush()
 }
 
+func (c *Conn) readN(b *bytepool.Bytes, n uint32) error {
+	if n <= 0 {
+		return ErrInvalidArguments
+	}
+
+	_, err := b.ReadNFrom(int64(n), c.rw)
+	return err
+}
+
 func (c *Conn) read(b *bytepool.Bytes) error {
 	c.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	_, err := io.ReadFull(c.rw, b.Bytes())

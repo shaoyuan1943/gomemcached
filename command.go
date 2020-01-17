@@ -42,7 +42,7 @@ func (cmd *Command) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, uint8
 	rsp := cmd.bytePool.Checkout()
 	defer rsp.Release()
 
-	if err := cmd.conn.read(rsp); err != nil {
+	if err := cmd.conn.readN(rsp, RSP_HEADER_LEN); err != nil {
 		return nil, 0, 0, err
 	}
 
@@ -58,7 +58,7 @@ func (cmd *Command) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, uint8
 
 	if bodyLen > 0 {
 		body := cmd.bytePool.Checkout()
-		if err := cmd.conn.read(body); err != nil {
+		if err := cmd.conn.readN(body, bodyLen); err != nil {
 			return nil, 0, 0, err
 		}
 
@@ -78,7 +78,7 @@ func (cmd *Command) set(key string, value interface{}, expiration uint32, cas ui
 		status:   0x00,
 		bodyLen:  0x00,
 		opaque:   0x00,
-		cas:      0x00,
+		cas:      cas,
 	}
 
 	req := cmd.bytePool.Checkout()
@@ -92,7 +92,7 @@ func (cmd *Command) set(key string, value interface{}, expiration uint32, cas ui
 	r.extLen = 0x08
 	// extra len, key len, value len
 	r.bodyLen = uint32(0x08 + len(key) + len(rawValue))
-
+	// request header
 	cmd.writeRequestHeader(r, req)
 	// extra:8byte |----flag:4----|----expiration:4----|
 	req.WriteUint32(0)
