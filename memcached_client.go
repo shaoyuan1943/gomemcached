@@ -4,48 +4,47 @@ type MemcachedClient struct {
 	cluster *cluster
 }
 
-func NewMemcachedClient(addrs []string, maxConnPerServer int) *MemcachedClient {
+func NewMemcachedClient(addrs []string, maxConnPerServer uint32) *MemcachedClient {
 	m := &MemcachedClient{}
 	m.cluster = createCluster(addrs, maxConnPerServer)
 	return m
 }
 
-func (m *MemcachedClient) choose(key string) (*server, *Command, error) {
-	if len(key) <= 0 {
-		return nil, nil, ErrInvalidArguments
-	}
-
-	server := m.cluster.chooseServer(key)
-	if server == nil {
-		return nil, nil, ErrNotFoundServerNode
-	}
-
-	cmd, err := server.GetCmd()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return server, cmd, nil
-}
-
 func (m *MemcachedClient) Get(key string, value interface{}) (uint64, error) {
-	server, cmd, err := m.choose(key)
+	server, cmder, err := m.cluster.ChooseServerCommand(key)
 	if err != nil {
 		return 0, err
 	}
 
-	cas, err := cmd.get(key, value)
-	server.PutCmd(cmd)
+	cas, err := cmder.get(key, value)
+	if err == nil {
+		m.cluster.ReleaseServerCommand(server, cmder)
+	}
 	return cas, err
 }
 
 func (m *MemcachedClient) Set(key string, value string, expiration uint32, cas uint64) error {
-	server, cmd, err := m.choose(key)
+	server, cmder, err := m.cluster.ChooseServerCommand(key)
 	if err != nil {
 		return err
 	}
 
-	err = cmd.set(key, value, expiration, cas)
-	server.PutCmd(cmd)
+	err = cmder.set(key, value, expiration, cas)
+	if err == nil {
+		m.cluster.ReleaseServerCommand(server, cmder)
+	}
 	return err
 }
+
+/*func (m *MemcachedClient) Add(key string, value string, expiration uint32, cas uint64) error {
+	server, cmder, err := m.cluster.ChooseServerCommand(key)
+	if err != nil {
+		return err
+	}
+
+	err = cmder.add(key, value, expiration, cas)
+	if err == nil {
+		m.cluster.ReleaseServerCommand(server, cmder)
+	}
+	return err
+}*/

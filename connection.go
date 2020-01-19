@@ -1,71 +1,41 @@
 package gomemcached
 
 import (
-	"bufio"
+	"fmt"
 	"io"
-	"net"
 	"time"
 
 	"github.com/karlseguin/bytepool"
 )
 
-var (
-	ConnectTimeout = time.Duration(5) * time.Second
-	ReadTimeout    = time.Duration(5) * time.Second
-	WriterTimeout  = time.Duration(5) * time.Second
-)
-
-type Conn struct {
-	conn net.Conn
-	rw   bufio.ReadWriter
+func (cmder *Commander) Giveup() {
+	fmt.Printf("something wrong with this connection: %v\n", cmder.ID)
+	cmder.conn.Close()
+	cmder.giveup = true
+	cmder.server.badCmders <- cmder
 }
 
-func connect(addr string) (*Conn, error) {
-	if len(addr) <= 0 {
-		return nil, ErrInvalidArguments
-	}
-
-	conn, err := net.DialTimeout("tcp", addr, ConnectTimeout)
-	if err != nil {
-		return nil, ErrNotConnected
-	}
-
-	c := &Conn{
-		conn: conn,
-		rw: bufio.ReadWriter{
-			Reader: bufio.NewReader(conn),
-			Writer: bufio.NewWriter(conn),
-		},
-	}
-
-	return c, nil
+func (cmder *Commander) flush() error {
+	cmder.conn.SetWriteDeadline(time.Now().Add(WriterTimeout))
+	return cmder.rw.Flush()
 }
 
-func (c *Conn) flush() error {
-	c.conn.SetWriteDeadline(time.Now().Add(WriterTimeout))
-	return c.rw.Flush()
-}
-
-func (c *Conn) readN(b *bytepool.Bytes, n uint32) error {
+func (cmder *Commander) readN(b *bytepool.Bytes, n uint32) error {
 	if n <= 0 {
 		return ErrInvalidArguments
 	}
 
-	_, err := b.ReadNFrom(int64(n), c.rw)
+	_, err := b.ReadNFrom(int64(n), cmder.rw)
 	return err
 }
 
-func (c *Conn) read(b *bytepool.Bytes) error {
-	c.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	_, err := io.ReadFull(c.rw, b.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (cmder *Commander) read(b *bytepool.Bytes) error {
+	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	_, err := io.ReadFull(cmder.rw, b.Bytes())
+	return err
 }
 
-func (c *Conn) write(b *bytepool.Bytes) error {
-	_, err := c.rw.Write(b.Bytes())
+func (cmder *Commander) write(b *bytepool.Bytes) error {
+	_, err := cmder.rw.Write(b.Bytes())
 	return err
 }

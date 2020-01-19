@@ -9,7 +9,8 @@ var (
 	ErrFillRequestHeaderFailed = errors.New("Fill request header failed")
 	ErrNotFoundServerNode      = errors.New("Not found server node")
 	ErrNoUsableConnection      = errors.New("No usable connection")
-
+	ErrBadConnection           = errors.New("Bad connection")
+	// memcached status
 	ErrKeyNotFound      = errors.New("Key not found")
 	ErrKeyExists        = errors.New("Key exists")
 	ErrValueTooLarge    = errors.New("Value too large")
@@ -26,7 +27,7 @@ var (
 	ErrTemporaryFailure = errors.New("Temporary failure")
 )
 
-func checkError(status uint16) error {
+func checkStatus(status uint16) error {
 	switch status {
 	case STATUS_AUTH_CONTINUE:
 		return ErrAuthContinue
