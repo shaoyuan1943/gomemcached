@@ -2,6 +2,7 @@ package gomemcached
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -30,6 +31,8 @@ type cluster struct {
 	hash2Servers map[uint32]*Server
 	addr2Servers map[string]*Server
 	nodeList     []uint32
+	ctx          context.Context
+	quitF        context.CancelFunc
 	sync.RWMutex
 }
 
@@ -64,7 +67,9 @@ func createCluster(addrs []string, maxConnPerServer uint32) *cluster {
 	}
 
 	sort.Sort(SortList(cl.nodeList))
-	go cl.checkServer()
+
+	cl.ctx, cl.quitF = context.WithCancel(context.Background())
+	//go cl.checkServer()
 	return cl
 }
 
@@ -96,6 +101,10 @@ func (s *Server) putCmder(cmder *Commander) {
 	}
 }
 
+func (cl *cluster) exit() {
+	cl.quitF()
+}
+
 func (cl *cluster) hashServer(s *Server) {
 	cl.addr2Servers[s.Addr] = s
 	for i := 0; i < NodeRepetitions/4; i++ {
@@ -114,10 +123,10 @@ func (cl *cluster) hashServer(s *Server) {
 			cmder := &Commander{
 				ID:   ID,
 				conn: conn,
-				rw: bufio.ReadWriter{
-					Reader: bufio.NewReader(conn),
-					Writer: bufio.NewWriter(conn),
-				},
+				rw: bufio.NewReadWriter(
+					bufio.NewReader(conn),
+					bufio.NewWriter(conn),
+				),
 				pool:   bytepool.New(24, 256),
 				server: s,
 				giveup: false,
@@ -224,6 +233,8 @@ func (cl *cluster) checkServer() {
 	keepTimer := time.After(time.Second * 5)
 	for {
 		select {
+		case <-cl.ctx.Done():
+			return
 		case <-keepTimer:
 			cl.doCheckServer()
 		default:

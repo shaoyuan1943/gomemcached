@@ -2,7 +2,6 @@ package gomemcached
 
 import (
 	"crypto/md5"
-	"fmt"
 	"hash/crc32"
 	"strconv"
 	"strings"
@@ -29,7 +28,6 @@ func KetamaHash(key string, index uint32) []uint32 {
 
 func MakeHash(key string) uint32 {
 	hashKey := crc32.Checksum([]byte(key), HashCRC32Table)
-	fmt.Printf("hash: %v\n", hashKey)
 	return hashKey
 }
 

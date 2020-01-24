@@ -11,21 +11,46 @@ var (
 	ErrNoUsableConnection      = errors.New("No usable connection")
 	ErrBadConnection           = errors.New("Bad connection")
 	// memcached status
-	ErrKeyNotFound      = errors.New("Key not found")
-	ErrKeyExists        = errors.New("Key exists")
-	ErrValueTooLarge    = errors.New("Value too large")
-	ErrItemNotStored    = errors.New("Item not stored")
-	ErrNoNumericValue   = errors.New("Incr/Decr on non-numeric value")
-	ErrVbucketNotFound  = errors.New("The vbucket belongs to another server")
-	ErrAuthFailed       = errors.New("Authentication error")
-	ErrAuthContinue     = errors.New("Authentication continue")
-	ErrUnknownCommand   = errors.New("Unknown command")
-	ErrOutOfMemory      = errors.New("Out of memory")
-	ErrNotSupported     = errors.New("Not supported")
-	ErrInternalError    = errors.New("Internal error")
-	ErrBusy             = errors.New("Internal error")
-	ErrTemporaryFailure = errors.New("Temporary failure")
+	ErrKeyNotFound      = NewStatusError(errors.New("Key not found"))
+	ErrKeyExists        = NewStatusError(errors.New("Key exists"))
+	ErrValueTooLarge    = NewStatusError(errors.New("Value too large"))
+	ErrItemNotStored    = NewStatusError(errors.New("Item not stored"))
+	ErrNoNumericValue   = NewStatusError(errors.New("Incr/Decr on non-numeric value"))
+	ErrVbucketNotFound  = NewStatusError(errors.New("The vbucket belongs to another server"))
+	ErrAuthFailed       = NewStatusError(errors.New("Authentication error"))
+	ErrAuthContinue     = NewStatusError(errors.New("Authentication continue"))
+	ErrUnknownCommand   = NewStatusError(errors.New("Unknown command"))
+	ErrOutOfMemory      = NewStatusError(errors.New("Out of memory"))
+	ErrNotSupported     = NewStatusError(errors.New("Not supported"))
+	ErrInternalError    = NewStatusError(errors.New("Internal error"))
+	ErrBusy             = NewStatusError(errors.New("Internal error"))
+	ErrTemporaryFailure = NewStatusError(errors.New("Temporary failure"))
 )
+
+type StatusError struct {
+	Err error
+}
+
+func (s *StatusError) Error() string {
+	return s.Err.Error()
+}
+
+func (s *StatusError) Is(err error) bool {
+	e, ok := err.(*StatusError)
+	if !ok {
+		return false
+	}
+
+	return e == s.Err
+}
+
+func (s *StatusError) Unwrap() error {
+	return s.Err
+}
+
+func NewStatusError(err error) *StatusError {
+	return &StatusError{Err: err}
+}
 
 func checkStatus(status uint16) error {
 	switch status {

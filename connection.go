@@ -25,14 +25,16 @@ func (cmder *Commander) readN(b *bytepool.Bytes, n uint32) error {
 		return ErrInvalidArguments
 	}
 
-	_, err := b.ReadNFrom(int64(n), cmder.rw)
+	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	_, err := b.ReadNFrom(int64(n), cmder.rw.Reader)
 	return err
 }
 
-func (cmder *Commander) read(b *bytepool.Bytes) error {
+func (cmder *Commander) read(n int) ([]byte, error) {
 	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	_, err := io.ReadFull(cmder.rw, b.Bytes())
-	return err
+	recv := make([]byte, n)
+	_, err := io.ReadFull(cmder.rw.Reader, recv)
+	return recv, err
 }
 
 func (cmder *Commander) write(b *bytepool.Bytes) error {

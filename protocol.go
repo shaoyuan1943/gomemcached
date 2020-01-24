@@ -51,43 +51,14 @@ const (
 	RSP_HEADER_LEN uint32 = 24
 )
 
-type requestHeader struct {
-	magic    uint8
-	opcode   uint8
-	keyLen   uint16
-	extLen   uint8
-	dataType uint8
-	status   uint16
-	bodyLen  uint32
-	opaque   uint32
-	cas      uint64
+type RequestHeader struct {
+	Magic    uint8
+	Opcode   uint8
+	KeyLen   uint16
+	ExtLen   uint8
+	DataType uint8
+	Status   uint16
+	BodyLen  uint32
+	Opaque   uint32
+	CAS      uint64
 }
-type responseHeader struct {
-	magic    uint8
-	opcode   uint8
-	keyLen   uint16
-	extLen   uint8
-	dataType uint8
-	status   uint16
-	bodyLen  uint32
-	opaque   uint32
-	cas      uint64
-}
-
-const (
-	DATA_TYPE_INT     uint32 = 0x01
-	DATA_TYPE_INT8    uint32 = 0x02
-	DATA_TYPE_INT16   uint32 = 0x03
-	DATA_TYPE_INT32   uint32 = 0x04
-	DATA_TYPE_INT64   uint32 = 0x05
-	DATA_TYPE_FLOAT32 uint32 = 0x06
-	DATA_TYPE_FLOAT64 uint32 = 0x07
-	DATA_TYPE_UINT    uint32 = 0x08
-	DATA_TYPE_UINT8   uint32 = 0x09
-	DATA_TYPE_UINT16  uint32 = 0x0A
-	DATA_TYPE_UINT32  uint32 = 0x0B
-	DATA_TYPE_UINT64  uint32 = 0x0C
-	DATA_TYPE_BOOL    uint32 = 0x0D
-	DATA_TYPE_STRING  uint32 = 0x0E
-	DATA_TYPE_BINARY  uint32 = 0x0F
-)
