@@ -69,7 +69,7 @@ func createCluster(addrs []string, maxConnPerServer uint32) *cluster {
 	sort.Sort(SortList(cl.nodeList))
 
 	cl.ctx, cl.quitF = context.WithCancel(context.Background())
-	//go cl.checkServer()
+	go cl.checkClusterServerNode()
 	return cl
 }
 
@@ -229,7 +229,7 @@ func (cl *cluster) ReloadCluster(addr string, maxConnPerServer uint32) error {
 	return nil
 }
 
-func (cl *cluster) checkServer() {
+func (cl *cluster) checkClusterServerNode() {
 	keepTimer := time.After(time.Second * 5)
 	for {
 		select {

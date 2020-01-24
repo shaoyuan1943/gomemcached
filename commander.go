@@ -3,7 +3,6 @@ package gomemcached
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -154,7 +153,6 @@ func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
 	}
 
 	if rawValue != nil {
-		fmt.Printf("rawValue:%v\n", rawValue.Bytes()[extLen:])
 		err = msgpack.Unmarshal(rawValue.Bytes()[extLen:], value)
 		if err != nil {
 			return 0, err
