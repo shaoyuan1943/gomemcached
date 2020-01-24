@@ -110,13 +110,13 @@ func (m *MemcachedClient) Increment(key string, delta uint64, expiration uint32,
 		return 0, 0, err
 	}
 
-	value, cas, err := cmder.atomic(OPCODE_INCR, key, delta, expiration, cas)
+	value, modifyCAS, err := cmder.atomic(OPCODE_INCR, key, delta, expiration, cas)
 	if err == nil {
 		m.cluster.ReleaseServerCommand(server, cmder)
 	} else if _, ok := err.(*StatusError); ok {
 		m.cluster.ReleaseServerCommand(server, cmder)
 	}
-	return value, cas, err
+	return value, modifyCAS, err
 }
 
 func (m *MemcachedClient) Decrement(key string, delta uint64, expiration uint32, cas uint64) (uint64, uint64, error) {
