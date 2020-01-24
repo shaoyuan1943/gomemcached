@@ -1,3 +1,5 @@
+[English](./README.md)/[中文](./README-zh.md)
+
 ### gomemcached
 gomemcached定义为轻量级和高性能的memcached Go客户端。
 * 轻快 
