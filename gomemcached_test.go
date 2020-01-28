@@ -13,7 +13,7 @@ var (
 
 func Instance() *MemcachedClient {
 	Once.Do(func() {
-		Client = NewMemcachedClient([]string{"10.11.133.161:11211"}, 5)
+		Client = NewMemcachedClient([]string{"192.168.2.169:11211"}, 5)
 	})
 
 	return Client

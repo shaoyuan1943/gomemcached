@@ -17,13 +17,13 @@ func RandString(n int) string {
 	return string(b)
 }
 
-func CreateCluster() *cluster {
+func CreateCluster() *Cluster {
 	addrs := []string{
 		"10.11.10.91", "10.11.133.161", "10.11.64.2", "12.65.89.35", "56.39.87.65",
 		"121.14.64.115", "89.56.87.12", "89.62.53.87", "192.168.0.1", "78.95.64.52",
 	}
 
-	cl := createCluster(addrs)
+	cl := createCluster(addrs, 5)
 	return cl
 }
 
@@ -33,8 +33,8 @@ func BenchmarkCluster_FindServerByKey(b *testing.B) {
 	cl := CreateCluster()
 	for i := 0; i < b.N; i++ {
 		key := RandString(8)
-		s := cl.FindServerByKey(key)
-		if s == nil {
+		_, _, err := cl.ChooseServerCommand(key)
+		if err != nil {
 			b.Errorf("not found server, key: %v\n", key)
 		}
 	}
@@ -47,8 +47,8 @@ func TestCluster_FindServerByKey(t *testing.T) {
 	hitMap := make(map[string]int)
 	for i := 0; i < 3000000; i++ {
 		key := RandString(8)
-		s := cl.FindServerByKey(key)
-		if s == nil {
+		s, _, err := cl.ChooseServerCommand(key)
+		if err != nil {
 			t.Errorf("not found server, key: %v\n", key)
 		} else {
 			if _, ok := hitMap[s.Addr]; !ok {

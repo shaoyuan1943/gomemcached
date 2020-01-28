@@ -10,6 +10,7 @@ var (
 	ErrNotFoundServerNode      = errors.New("Not found server node")
 	ErrNoUsableConnection      = errors.New("No usable connection")
 	ErrBadConnection           = errors.New("Bad connection")
+	ErrServerAlreadyInCluster  = errors.New("Server already in Cluster")
 	// memcached status
 	ErrKeyNotFound      = NewStatusError(errors.New("Key not found"))
 	ErrKeyExists        = NewStatusError(errors.New("Key exists"))

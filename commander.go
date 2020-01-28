@@ -86,14 +86,14 @@ func (cmder *Commander) store(opCode uint8, key string, value interface{}, expir
 	defer req.Release()
 
 	// type value --> raw value
-	rawValue, err := msgpack.Marshal(value)
+	byteData, err := msgpack.Marshal(value)
 	if err != nil {
 		return 0, err
 	}
 
 	r.ExtLen = 0x08
 	// extra len, key len, value len
-	r.BodyLen = uint32(0x08 + len(key) + len(rawValue))
+	r.BodyLen = uint32(0x08 + len(key) + len(byteData))
 	// request header
 	writeRequestHeader(r, req)
 	// extra:8byte |----flag:4----|----expiration:4----|
@@ -104,17 +104,18 @@ func (cmder *Commander) store(opCode uint8, key string, value interface{}, expir
 		return 0, err
 	}
 	// value
-	if _, err = req.Write(rawValue); err != nil {
+	if _, err = req.Write(byteData); err != nil {
 		return 0, err
 	}
 
 	var modifyCAS uint64
-	raw, _, modifyCAS, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(raw)
+	}()
+
 	return modifyCAS, err
 }
 
@@ -143,11 +144,11 @@ func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
 
 	// flush to memcached server
 	rawValue, extLen, cas, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(rawValue)
+	}()
 	if err != nil {
 		return 0, err
 	}
@@ -182,11 +183,11 @@ func (cmder *Commander) noop() error {
 
 	writeRequestHeader(r, req)
 	rawValue, _, _, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(rawValue)
+	}()
 	return err
 }
 
@@ -210,11 +211,11 @@ func (cmder *Commander) delete(key string, cas uint64) error {
 	// body: key
 	req.WriteString(key)
 	rawValue, _, _, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(rawValue)
+	}()
 	return err
 }
 
@@ -235,21 +236,22 @@ func (cmder *Commander) append(opCode uint8, key string, value interface{}, cas 
 	defer req.Release()
 
 	// type value --> raw value
-	rawValue, err := msgpack.Marshal(value)
+	byteData, err := msgpack.Marshal(value)
 	if err != nil {
 		return 0, err
 	}
 
-	r.BodyLen = uint32(len(key) + len(rawValue))
+	r.BodyLen = uint32(len(key) + len(byteData))
 	writeRequestHeader(r, req)
 	req.WriteString(key)
-	req.Write(rawValue)
-	raw, _, modifyCAS, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	req.Write(byteData)
+
+	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(raw)
+	}()
 	return modifyCAS, err
 }
 
@@ -281,11 +283,11 @@ func (cmder *Commander) atomic(opCode uint8, key string, delta uint64, expiratio
 	req.WriteString(key)
 
 	rawValue, extLen, cas, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(rawValue)
+	}()
 
 	if err != nil {
 		return 0, 0, err
@@ -320,11 +322,11 @@ func (cmder *Commander) touchAtomicValue(key string) (uint64, error) {
 
 	// flush to memcached server
 	rawValue, extLen, _, err := cmder.waitForResponse(req)
-	defer func(b *bytepool.Bytes) {
-		if b != nil {
-			b.Release()
+	defer func() {
+		if rawValue != nil {
+			rawValue.Release()
 		}
-	}(rawValue)
+	}()
 	if err != nil {
 		return 0, err
 	}

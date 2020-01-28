@@ -12,7 +12,8 @@ func (cmder *Commander) Giveup() {
 	fmt.Printf("something wrong with this connection: %v\n", cmder.ID)
 	cmder.conn.Close()
 	cmder.giveup = true
-	cmder.server.badCmders <- cmder
+	cmder.server.badCmders = append(cmder.server.badCmders, cmder)
+	cmder.server.cluster.badServerNoticer <- cmder.server
 }
 
 func (cmder *Commander) flush() error {

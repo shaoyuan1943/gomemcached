@@ -19,20 +19,25 @@ var (
 	CommanderID     int64 = 10000
 )
 
+type ServerErrorCallback func(addr string)
+
 type Server struct {
 	Addr              string
 	VirtualHashs      []uint32
 	MaxCommanderCount uint32
 	cmders            map[int64]*Commander
-	badCmders         chan *Commander
+	badCmders         []*Commander
+	cluster           *Cluster
 }
 
-type cluster struct {
-	hash2Servers map[uint32]*Server
-	addr2Servers map[string]*Server
-	nodeList     []uint32
-	ctx          context.Context
-	quitF        context.CancelFunc
+type Cluster struct {
+	hash2Servers      map[uint32]*Server
+	addr2Servers      map[string]*Server
+	nodeList          []uint32
+	ctx               context.Context
+	quitF             context.CancelFunc
+	serverErrCallback ServerErrorCallback
+	badServerNoticer  chan *Server
 	sync.RWMutex
 }
 
@@ -49,11 +54,12 @@ func connect(addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-func createCluster(addrs []string, maxConnPerServer uint32) *cluster {
-	cl := &cluster{
-		hash2Servers: make(map[uint32]*Server),
-		nodeList:     make([]uint32, len(addrs)*int(maxConnPerServer)),
-		addr2Servers: make(map[string]*Server, len(addrs)),
+func createCluster(addrs []string, maxConnPerServer uint32) *Cluster {
+	cl := &Cluster{
+		hash2Servers:     make(map[uint32]*Server),
+		nodeList:         make([]uint32, len(addrs)*int(maxConnPerServer)),
+		addr2Servers:     make(map[string]*Server, len(addrs)),
+		badServerNoticer: make(chan *Server),
 	}
 
 	for _, addr := range addrs {
@@ -61,7 +67,7 @@ func createCluster(addrs []string, maxConnPerServer uint32) *cluster {
 			Addr:              addr,
 			MaxCommanderCount: maxConnPerServer,
 			cmders:            make(map[int64]*Commander, maxConnPerServer),
-			badCmders:         make(chan *Commander, maxConnPerServer),
+			cluster:           cl,
 		}
 		cl.hashServer(s)
 	}
@@ -101,11 +107,11 @@ func (s *Server) putCmder(cmder *Commander) {
 	}
 }
 
-func (cl *cluster) exit() {
+func (cl *Cluster) exit() {
 	cl.quitF()
 }
 
-func (cl *cluster) hashServer(s *Server) {
+func (cl *Cluster) hashServer(s *Server) {
 	cl.addr2Servers[s.Addr] = s
 	for i := 0; i < NodeRepetitions/4; i++ {
 		hashs := KetamaHash(s.Addr, (uint32)(i))
@@ -136,7 +142,7 @@ func (cl *cluster) hashServer(s *Server) {
 	}
 }
 
-func (cl *cluster) chooseServer(key string) *Server {
+func (cl *Cluster) chooseServer(key string) *Server {
 	if len(cl.nodeList) <= 0 {
 		return nil
 	}
@@ -175,13 +181,13 @@ func (cl *cluster) chooseServer(key string) *Server {
 
 	s, ok := cl.hash2Servers[targetHash]
 	if !ok {
-		panic("virtual node not found in cluster")
+		panic("Virtual node not found in Cluster")
 	}
 
 	return s
 }
 
-func (cl *cluster) ChooseServerCommand(key string) (*Server, *Commander, error) {
+func (cl *Cluster) ChooseServerCommand(key string) (*Server, *Commander, error) {
 	cl.RLock()
 	defer cl.RUnlock()
 
@@ -203,67 +209,57 @@ func (cl *cluster) ChooseServerCommand(key string) (*Server, *Commander, error) 
 	return s, cmder, err
 }
 
-func (cl *cluster) ReleaseServerCommand(s *Server, cmder *Commander) {
+func (cl *Cluster) ReleaseServerCommand(s *Server, cmder *Commander) {
 	cl.Lock()
 	defer cl.Unlock()
 
 	s.putCmder(cmder)
 }
 
-func (cl *cluster) ReloadCluster(addr string, maxConnPerServer uint32) error {
+func (cl *Cluster) ReloadCluster(addr string, maxConnPerServer uint32) error {
 	cl.Lock()
 	defer cl.Unlock()
 
 	if _, ok := cl.addr2Servers[addr]; ok {
-		return ErrInvalidArguments
+		return ErrServerAlreadyInCluster
 	}
 
 	s := &Server{
 		Addr:              addr,
 		MaxCommanderCount: maxConnPerServer,
 		cmders:            make(map[int64]*Commander, maxConnPerServer),
-		badCmders:         make(chan *Commander, maxConnPerServer),
 	}
 
 	cl.hashServer(s)
+	
 	return nil
 }
 
-func (cl *cluster) checkClusterServerNode() {
-	keepTimer := time.After(time.Second * 5)
+func (cl *Cluster) checkClusterServerNode() {
+	heartbeatTimer := time.After(time.Second * 3)
 	for {
 		select {
 		case <-cl.ctx.Done():
 			return
-		case <-keepTimer:
-			cl.doCheckServer()
+		case s := <-cl.badServerNoticer:
+			cl.doCheckServer(s)
+		case <-heartbeatTimer:
+			cl.doCheckHeartbeat()
 		default:
 		}
 	}
 }
 
-func (cl *cluster) doCheckServer() {
-	cl.Lock()
-	defer cl.Unlock()
+func (cl *Cluster) doCheckServer(s *Server) {
+	if len(s.badCmders) >= int(s.MaxCommanderCount) {
+		cl.Lock()
+		defer cl.Unlock()
 
-	needRebuild := false
-	for _, s := range cl.addr2Servers {
-		if len(s.badCmders) >= int(s.MaxCommanderCount) {
-			// if all commanders of server failed, remove this server from cluster
-			fmt.Printf("some server(%v) failed.\n", s.Addr)
-
-			cl.cleanBadServer(s)
-			needRebuild = true
-			continue
+		cl.cleanBadServer(s)
+		if cl.serverErrCallback != nil {
+			cl.serverErrCallback(s.Addr)
 		}
 
-		// heartbeat
-		for _, cmder := range s.cmders {
-			cmder.noop()
-		}
-	}
-
-	if needRebuild {
 		// rebuild nodeList
 		nodeList := cl.nodeList[:0]
 		for _, s := range cl.addr2Servers {
@@ -272,11 +268,11 @@ func (cl *cluster) doCheckServer() {
 		cl.nodeList = nodeList
 		sort.Sort(SortList(cl.nodeList))
 
-		fmt.Printf("rebuild cluster, nodeList: %v\n", len(cl.nodeList))
+		fmt.Printf("rebuild Cluster, nodeList: %v\n", len(cl.nodeList))
 	}
 }
 
-func (cl *cluster) cleanBadServer(s *Server) {
+func (cl *Cluster) cleanBadServer(s *Server) {
 	// remove sever from c.servers
 	for _, v := range s.VirtualHashs {
 		delete(cl.hash2Servers, v)
@@ -284,4 +280,15 @@ func (cl *cluster) cleanBadServer(s *Server) {
 
 	// remove from c.allServer
 	delete(cl.addr2Servers, s.Addr)
+}
+
+func (cl *Cluster) doCheckHeartbeat() {
+	cl.RLock()
+	defer cl.RUnlock()
+
+	for _, server := range cl.addr2Servers {
+		for _, cmder := range server.cmders {
+			cmder.noop()
+		}
+	}
 }

@@ -1,15 +1,15 @@
-[English](./README.md)/[中文](./README-zh.md)
+[English](./README-en.md)/[中文](./README.md)
 
 ### gomemcached
-gomemcached is a light-weight and high performance memcache client for Go.
-* Light-weight and fast    
-* Binary protocol  
-* Support sync and async mode  
-* Sample interface
+gomemcached定义为轻量级和高性能的memcached Go客户端。
+* 轻快 
+* 二进制协议  
+* 支持同步与异步模式（异步模式在v2分支中实现）  
+* 接口简单  
 
-### Install
+### 安装
 ```go get github.com/shaoyuan1943/gomemcached```
 
-### Usage
+### 使用
 
-### License 
+### 开源协议
