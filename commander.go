@@ -69,7 +69,7 @@ func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, u
 	return body, extLen, cas, nil
 }
 
-func (cmder *Commander) store(opCode uint8, key string, value interface{}, expiration uint32, cas uint64) (uint64, error) {
+func (cmder *Commander) store(opCode uint8, key string, value interface{}, expiration uint32, cas uint64, useMsgp bool) (uint64, error) {
 	r := &RequestHeader{
 		Magic:    MAGIC_REQUEST,
 		Opcode:   opCode,
@@ -82,27 +82,43 @@ func (cmder *Commander) store(opCode uint8, key string, value interface{}, expir
 		CAS:      cas,
 	}
 
+	var err error
 	req := cmder.pool.Checkout()
 	defer req.Release()
 
-	// type value --> raw value
-	byteData, err := msgpack.Marshal(value)
-	if err != nil {
-		return 0, err
+	var byteData []byte
+	if useMsgp {
+		// type value --> raw value
+		byteData, err = msgpack.Marshal(value)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		byteData = value.([]byte)
 	}
 
-	r.ExtLen = 0x08
 	// extra len, key len, value len
+	r.ExtLen = 0x08
 	r.BodyLen = uint32(0x08 + len(key) + len(byteData))
+
 	// request header
 	writeRequestHeader(r, req)
+	// request end
+
 	// extra:8byte |----flag:4----|----expiration:4----|
-	req.WriteUint32(0)
+	if useMsgp {
+		req.WriteUint32(USE_MSGP_FLAG)
+	} else {
+		req.WriteUint32(0)
+	}
 	req.WriteUint32(expiration)
+	// extra end
+
 	// key
 	if _, err = req.WriteString(key); err != nil {
 		return 0, err
 	}
+
 	// value
 	if _, err = req.Write(byteData); err != nil {
 		return 0, err
@@ -149,17 +165,29 @@ func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
 			rawValue.Release()
 		}
 	}()
+
 	if err != nil {
 		return 0, err
 	}
 
-	if rawValue != nil {
+	if rawValue == nil {
+		return cas, nil
+	}
+
+	flag := binary.BigEndian.Uint32(rawValue.Bytes()[:extLen])
+	if flag == USE_MSGP_FLAG {
 		err = msgpack.Unmarshal(rawValue.Bytes()[extLen:], value)
 		if err != nil {
 			return 0, err
 		}
-
-		return cas, nil
+	} else {
+		switch value.(type) {
+		case *[]byte:
+			v := value.(*[]byte)
+			*v = append((*v), rawValue.Bytes()[extLen:]...)
+		default:
+			return 0, ErrUnpackTypeInvalid
+		}
 	}
 
 	return cas, nil
@@ -219,7 +247,7 @@ func (cmder *Commander) delete(key string, cas uint64) error {
 	return err
 }
 
-func (cmder *Commander) append(opCode uint8, key string, value interface{}, cas uint64) (uint64, error) {
+func (cmder *Commander) append(opCode uint8, key string, value []byte, cas uint64) (uint64, error) {
 	r := &RequestHeader{
 		Magic:    MAGIC_REQUEST,
 		Opcode:   opCode,
@@ -235,16 +263,10 @@ func (cmder *Commander) append(opCode uint8, key string, value interface{}, cas 
 	req := cmder.pool.Checkout()
 	defer req.Release()
 
-	// type value --> raw value
-	byteData, err := msgpack.Marshal(value)
-	if err != nil {
-		return 0, err
-	}
-
-	r.BodyLen = uint32(len(key) + len(byteData))
+	r.BodyLen = uint32(len(key) + len(value))
 	writeRequestHeader(r, req)
 	req.WriteString(key)
-	req.Write(byteData)
+	req.Write(value)
 
 	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
 	defer func() {

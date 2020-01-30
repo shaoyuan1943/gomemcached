@@ -216,7 +216,7 @@ func (cl *Cluster) ReleaseServerCommand(s *Server, cmder *Commander) {
 	s.putCmder(cmder)
 }
 
-func (cl *Cluster) ReloadCluster(addr string, maxConnPerServer uint32) error {
+func (cl *Cluster) AddServer2Cluster(addr string, maxConnPerServer uint32) error {
 	cl.Lock()
 	defer cl.Unlock()
 
