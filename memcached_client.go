@@ -53,48 +53,48 @@ func (m *MemcachedClient) Get(key string, value interface{}) (uint64, error) {
 	return modifyCAS, err
 }
 
-func (m *MemcachedClient) Set(key string, value interface{}, expiration uint32) (uint64, error) {
+func (m *MemcachedClient) Set(key string, value interface{}, expiration uint32, cas uint64) (uint64, error) {
 	var modifyCAS uint64
 	var resErr error
 
 	err := m.exec(key, func(cmder *Commander) error {
-		modifyCAS, resErr = cmder.store(OPCODE_SET, key, value, expiration, 0, true)
+		modifyCAS, resErr = cmder.store(OPCODE_SET, key, value, expiration, cas, true)
 		return resErr
 	})
 
 	return modifyCAS, err
 }
 
-func (m *MemcachedClient) SetRawData(key string, value []byte, expiration uint32) (uint64, error) {
+func (m *MemcachedClient) SetRawData(key string, value []byte, expiration uint32, cas uint64) (uint64, error) {
 	var modifyCAS uint64
 	var resErr error
 
 	err := m.exec(key, func(cmder *Commander) error {
-		modifyCAS, resErr = cmder.store(OPCODE_SET, key, value, expiration, 0, false)
+		modifyCAS, resErr = cmder.store(OPCODE_SET, key, value, expiration, cas, false)
 		return resErr
 	})
 
 	return modifyCAS, err
 }
 
-func (m *MemcachedClient) Add(key string, value interface{}, expiration uint32) (uint64, error) {
+func (m *MemcachedClient) Add(key string, value interface{}, expiration uint32, cas uint64) (uint64, error) {
 	var modifyCAS uint64
 	var resErr error
 
 	err := m.exec(key, func(cmder *Commander) error {
-		modifyCAS, resErr = cmder.store(OPCODE_ADD, key, value, expiration, 0, true)
+		modifyCAS, resErr = cmder.store(OPCODE_ADD, key, value, expiration, cas, true)
 		return resErr
 	})
 
 	return modifyCAS, err
 }
 
-func (m *MemcachedClient) AddRawData(key string, value []byte, expiration uint32) (uint64, error) {
+func (m *MemcachedClient) AddRawData(key string, value []byte, expiration uint32, cas uint64) (uint64, error) {
 	var modifyCAS uint64
 	var resErr error
 
 	err := m.exec(key, func(cmder *Commander) error {
-		modifyCAS, resErr = cmder.store(OPCODE_ADD, key, value, expiration, 0, false)
+		modifyCAS, resErr = cmder.store(OPCODE_ADD, key, value, expiration, cas, false)
 		return resErr
 	})
 

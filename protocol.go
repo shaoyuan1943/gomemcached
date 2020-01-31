@@ -66,19 +66,3 @@ type RequestHeader struct {
 	Opaque   uint32
 	CAS      uint64
 }
-
-const (
-	TYPE_INT8      uint32 = 0x02
-	TYPE_INT16     uint32 = 0x03
-	TYPE_INT32     uint32 = 0x04
-	TYPE_INT64     uint32 = 0x05
-	TYPE_FLOAT32   uint32 = 0x06
-	TYPE_FLOAT64   uint32 = 0x07
-	TYPE_UINT8     uint32 = 0x09
-	TYPE_UINT16    uint32 = 0x0A
-	TYPE_UINT32    uint32 = 0x0B
-	TYPE_UINT64    uint32 = 0x0C
-	TYPE_BOOL      uint32 = 0x0D
-	TYPE_STRING    uint32 = 0x0E
-	TYPE_CUSTOMIZE uint32 = 0x0F
-)
