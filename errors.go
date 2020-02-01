@@ -12,21 +12,22 @@ var (
 	ErrBadConnection           = errors.New("Bad connection")
 	ErrServerAlreadyInCluster  = errors.New("Server already in Cluster")
 	// memcached status
-	ErrKeyNotFound       = NewStatusError(errors.New("Key not found"))
-	ErrKeyExists         = NewStatusError(errors.New("Key exists"))
-	ErrValueTooLarge     = NewStatusError(errors.New("Value too large"))
-	ErrItemNotStored     = NewStatusError(errors.New("Item not stored"))
-	ErrNoNumericValue    = NewStatusError(errors.New("Incr/Decr on non-numeric value"))
-	ErrVbucketNotFound   = NewStatusError(errors.New("The vbucket belongs to another server"))
-	ErrAuthFailed        = NewStatusError(errors.New("Authentication error"))
-	ErrAuthContinue      = NewStatusError(errors.New("Authentication continue"))
-	ErrUnknownCommand    = NewStatusError(errors.New("Unknown command"))
-	ErrOutOfMemory       = NewStatusError(errors.New("Out of memory"))
-	ErrNotSupported      = NewStatusError(errors.New("Not supported"))
-	ErrInternalError     = NewStatusError(errors.New("Internal error"))
-	ErrBusy              = NewStatusError(errors.New("Internal error"))
-	ErrTemporaryFailure  = NewStatusError(errors.New("Temporary failure"))
-	ErrUnpackTypeInvalid = NewStatusError(errors.New("Unpack type invalid"))
+	ErrKeyNotFound             = NewStatusError(errors.New("Key not found"))
+	ErrKeyExists               = NewStatusError(errors.New("Key exists"))
+	ErrValueTooLarge           = NewStatusError(errors.New("Value too large"))
+	ErrItemNotStored           = NewStatusError(errors.New("Item not stored"))
+	ErrNoNumericValue          = NewStatusError(errors.New("Incr/Decr on non-numeric value"))
+	ErrVbucketNotFound         = NewStatusError(errors.New("The vbucket belongs to another server"))
+	ErrAuthFailed              = NewStatusError(errors.New("Authentication error"))
+	ErrAuthContinue            = NewStatusError(errors.New("Authentication continue"))
+	ErrUnknownCommand          = NewStatusError(errors.New("Unknown command"))
+	ErrOutOfMemory             = NewStatusError(errors.New("Out of memory"))
+	ErrNotSupported            = NewStatusError(errors.New("Not supported"))
+	ErrInternalError           = NewStatusError(errors.New("Internal error"))
+	ErrBusy                    = NewStatusError(errors.New("Internal error"))
+	ErrTemporaryFailure        = NewStatusError(errors.New("Temporary failure"))
+	ErrUnpackTypeInvalid       = NewStatusError(errors.New("Unpack type invalid"))
+	ErrCommandArgumentsInvalid = NewStatusError(errors.New("Command arguments invalid"))
 )
 
 type StatusError struct {
@@ -65,7 +66,7 @@ func checkStatus(status uint16) error {
 	case STATUS_INTERNAL_ERROR:
 		return ErrInternalError
 	case STATUS_INVALID_ARGS:
-		return ErrInvalidArguments
+		return ErrCommandArgumentsInvalid
 	case STATUS_KEY_EXISTS:
 		return ErrKeyExists
 	case STATUS_KEY_NOT_FOUND:

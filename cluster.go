@@ -57,7 +57,6 @@ func connect(addr string) (net.Conn, error) {
 func createCluster(addrs []string, maxConnPerServer uint32) *Cluster {
 	cl := &Cluster{
 		hash2Servers:     make(map[uint32]*Server),
-		nodeList:         make([]uint32, len(addrs)*int(maxConnPerServer)),
 		addr2Servers:     make(map[string]*Server, len(addrs)),
 		badServerNoticer: make(chan *Server),
 	}
@@ -144,6 +143,7 @@ func (cl *Cluster) hashServer(s *Server) {
 
 func (cl *Cluster) chooseServer(key string) *Server {
 	if len(cl.nodeList) <= 0 {
+		fmt.Printf("len(cl.nodeList) <= 0 \n")
 		return nil
 	}
 
@@ -176,6 +176,7 @@ func (cl *Cluster) chooseServer(key string) *Server {
 	}
 
 	if targetHash <= 0 {
+		fmt.Printf("targetHash <= 0, hashValue: %v, nodeList: %v \n", hashValue, len(cl.nodeList))
 		return nil
 	}
 
@@ -231,7 +232,7 @@ func (cl *Cluster) AddServer2Cluster(addr string, maxConnPerServer uint32) error
 	}
 
 	cl.hashServer(s)
-	
+
 	return nil
 }
 
