@@ -1,6 +1,7 @@
 package gomemcached
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ type Person struct {
 }
 
 func setValue(t *testing.T, key string, value interface{}) {
-	_, err := Instance().Set(key, value, 0)
+	_, err := Instance().Set(key, value, 0, 0)
 	if err != nil {
 		t.Errorf("Set err: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestAtomic(t *testing.T) {
 }
 
 func TestSetExpiration(t *testing.T) {
-	_, err := Instance().Set("TestSetExpiration", "HelloWorld", 10)
+	_, err := Instance().Set("TestSetExpiration", "HelloWorld", 10, 0)
 	if err != nil {
 		t.Errorf("TestSetExpiration err: %v", err)
 		return
@@ -188,4 +189,103 @@ func TestSetExpiration(t *testing.T) {
 	}
 
 	t.Logf("TestSetExpiration: %v", value)
+}
+
+func TestAppend(t *testing.T) {
+	_, err := Instance().SetRawData("TestAppend", []byte("HelloWorld"), 0, 0)
+	if err != nil {
+		t.Errorf("TestAppend err: %v", err)
+		return
+	}
+
+	_, err = Instance().Append("TestAppend", []byte("Iamprogrammer"), 0)
+	if err != nil {
+		t.Errorf("TestAppend err: %v", err)
+		return
+	}
+
+	var value1 []byte
+	_, err = Instance().Get("TestAppend", &value1)
+	if err != nil {
+		t.Errorf("TestAppend err: %v", err)
+		return
+	}
+
+	t.Logf("TestAppend value1: %v", string(value1))
+
+	_, err = Instance().Prepend("TestAppend", []byte("NiceTooMeetYou"), 0)
+	if err != nil {
+		t.Errorf("TestAppend err: %v", err)
+		return
+	}
+
+	var value2 []byte
+	_, err = Instance().Get("TestAppend", &value2)
+	if err != nil {
+		t.Errorf("TestAppend err: %v", err)
+		return
+	}
+
+	t.Logf("TestAppend value2: %v", string(value2))
+}
+
+func TestCAS(t *testing.T) {
+	cas, err := Instance().Add("TestCAS3", "HelloWorld", 0, 0)
+	if err != nil {
+		t.Errorf("Set err-->1: %v", err)
+		return
+	}
+	t.Logf("cas-->1: %v", cas)
+
+	cas, err = Instance().Add("TestCAS3", "NiceTooMeetYou", 0, cas)
+	if err != nil {
+		t.Errorf("Set err-->2: %v", err)
+		return
+	}
+	t.Logf("cas-->2: %v", cas)
+
+	var value string
+	cas, err = Instance().Get("TestCAS3", &value)
+	t.Logf("Get: %v, %v", cas, value)
+
+	cas, err = Instance().Add("TestCAS3", "Iamironman", 0, cas+1)
+	if err != nil {
+		t.Errorf("Set err-->3: %v", err)
+		return
+	}
+	t.Logf("cas-->3: %v", cas)
+}
+
+var rander *rand.Rand
+
+func GetRandomString(l int) string {
+	str := "0123456789abcdefghijklmnopqrstuvwxyz"
+	bytes := []byte(str)
+	result := []byte{}
+	for i := 0; i < l; i++ {
+		result = append(result, bytes[rander.Intn(len(bytes))])
+	}
+	return string(result)
+}
+
+func BenchmarkMemcachedClient(b *testing.B) {
+	b.StopTimer()
+
+	rander = rand.New(rand.NewSource(time.Now().UnixNano()))
+	benchTimes := b.N
+	var randomKey []string
+	var randomValue []string
+	for i := 0; i < benchTimes; i++ {
+		randomKey = append(randomKey, GetRandomString(10))
+		randomValue = append(randomValue, GetRandomString(8))
+	}
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Instance().Set(randomKey[i], randomValue[i], 0, 0)
+		if err != nil {
+			b.Fatalf("Set err: %v", err)
+			return
+		}
+	}
 }
