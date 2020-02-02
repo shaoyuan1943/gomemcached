@@ -143,7 +143,6 @@ func (cl *Cluster) hashServer(s *Server) {
 
 func (cl *Cluster) chooseServer(key string) *Server {
 	if len(cl.nodeList) <= 0 {
-		fmt.Printf("len(cl.nodeList) <= 0 \n")
 		return nil
 	}
 
@@ -176,7 +175,6 @@ func (cl *Cluster) chooseServer(key string) *Server {
 	}
 
 	if targetHash <= 0 {
-		fmt.Printf("targetHash <= 0, hashValue: %v, nodeList: %v \n", hashValue, len(cl.nodeList))
 		return nil
 	}
 
