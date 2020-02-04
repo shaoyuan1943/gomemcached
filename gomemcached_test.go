@@ -9,15 +9,15 @@ import (
 
 var (
 	Once   sync.Once
-	Client *MemcachedClient
+	client Client
 )
 
-func Instance() *MemcachedClient {
+func Instance() Client {
 	Once.Do(func() {
-		Client = NewMemcachedClient([]string{"192.168.2.169:11211"}, 5)
+		client = NewMemcachedClient([]string{"192.168.2.169:11211"}, 5)
 	})
 
-	return Client
+	return client
 }
 
 type Person struct {
@@ -27,7 +27,7 @@ type Person struct {
 }
 
 func setValue(t *testing.T, key string, value interface{}) {
-	_, err := Instance().Set(key, value, 0, 0)
+	_, err := Instance().Set(&KeyArgs{Key: key, Value: value, Expiration: 0, CAS: 0})
 	if err != nil {
 		t.Errorf("Set err: %v", err)
 	}
@@ -135,28 +135,28 @@ func TestSetAndGetTypeValue(t *testing.T) {
 }
 
 func TestAtomic(t *testing.T) {
-	value, _, err := Instance().Increment("TestAtomic_incr", 10000, 0, 0)
+	value, _, err := Instance().Increment(&KeyArgs{Key: "TestAtomic", Delta: 10000})
 	if err != nil {
 		t.Errorf("TestAtomic_incr err: %v", err)
 		return
 	}
 	t.Logf("TestAtomic_incr: %v", value)
 
-	value, _, err = Instance().Increment("TestAtomic_incr", 20000, 0, 0)
+	value, _, err = Instance().Increment(&KeyArgs{Key: "TestAtomic", Delta: 20000})
 	if err != nil {
 		t.Errorf("TestAtomic_incr err: %v", err)
 		return
 	}
 	t.Logf("TestAtomic_incr: %v", value)
 
-	value, _, err = Instance().Increment("TestAtomic_incr", 30000, 0, 0)
+	value, _, err = Instance().Increment(&KeyArgs{Key: "TestAtomic", Delta: 30000})
 	if err != nil {
 		t.Errorf("TestAtomic_incr err: %v", err)
 		return
 	}
 	t.Logf("TestAtomic_incr: %v", value)
 
-	value, _, err = Instance().Increment("TestAtomic_incr", 40000, 0, 0)
+	value, _, err = Instance().Increment(&KeyArgs{Key: "TestAtomic", Delta: 40000})
 	if err != nil {
 		t.Errorf("TestAtomic_incr err: %v", err)
 		return
@@ -173,7 +173,7 @@ func TestAtomic(t *testing.T) {
 }
 
 func TestSetExpiration(t *testing.T) {
-	_, err := Instance().Set("TestSetExpiration", "HelloWorld", 10, 0)
+	_, err := Instance().Set(&KeyArgs{Key: "TestSetExpiration", Value: "HelloWorld", Expiration: 10})
 	if err != nil {
 		t.Errorf("TestSetExpiration err: %v", err)
 		return
@@ -192,13 +192,13 @@ func TestSetExpiration(t *testing.T) {
 }
 
 func TestAppend(t *testing.T) {
-	_, err := Instance().SetRawData("TestAppend", []byte("HelloWorld"), 0, 0)
+	_, err := Instance().SetRawData(&KeyArgs{Key: "TestAppend", Value: []byte("HelloWorld")})
 	if err != nil {
 		t.Errorf("TestAppend err: %v", err)
 		return
 	}
 
-	_, err = Instance().Append("TestAppend", []byte("Iamprogrammer"), 0)
+	_, err = Instance().Append(&KeyArgs{Key: "TestAppend", Value: []byte("Iamprogrammer")})
 	if err != nil {
 		t.Errorf("TestAppend err: %v", err)
 		return
@@ -213,7 +213,7 @@ func TestAppend(t *testing.T) {
 
 	t.Logf("TestAppend value1: %v", string(value1))
 
-	_, err = Instance().Prepend("TestAppend", []byte("NiceTooMeetYou"), 0)
+	_, err = Instance().Prepend(&KeyArgs{Key: "TestAppend", Value: []byte("NiceTooMeetYou")})
 	if err != nil {
 		t.Errorf("TestAppend err: %v", err)
 		return
@@ -230,14 +230,14 @@ func TestAppend(t *testing.T) {
 }
 
 func TestCAS(t *testing.T) {
-	cas, err := Instance().Add("TestCAS3", "HelloWorld", 0, 0)
+	cas, err := Instance().Add(&KeyArgs{Key: "TestCAS3", Value: "HelloWorld"})
 	if err != nil {
 		t.Errorf("Set err-->1: %v", err)
 		return
 	}
 	t.Logf("cas-->1: %v", cas)
 
-	cas, err = Instance().Add("TestCAS3", "NiceTooMeetYou", 0, cas)
+	cas, err = Instance().Add(&KeyArgs{Key: "TestCAS3", Value: "NiceTooMeetYou", CAS: cas})
 	if err != nil {
 		t.Errorf("Set err-->2: %v", err)
 		return
@@ -248,7 +248,7 @@ func TestCAS(t *testing.T) {
 	cas, err = Instance().Get("TestCAS3", &value)
 	t.Logf("Get: %v, %v", cas, value)
 
-	cas, err = Instance().Add("TestCAS3", "Iamironman", 0, cas+1)
+	cas, err = Instance().Add(&KeyArgs{Key: "TestCAS3", Value: "Iamironman", CAS: cas + 1})
 	if err != nil {
 		t.Errorf("Set err-->3: %v", err)
 		return
@@ -282,7 +282,7 @@ func BenchmarkMemcachedClient(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := Instance().Set(randomKey[i], randomValue[i], 0, 0)
+		_, err := Instance().Set(&KeyArgs{Key: randomKey[i], Value: randomValue[i]})
 		if err != nil {
 			b.Fatalf("Set err: %v", err)
 			return

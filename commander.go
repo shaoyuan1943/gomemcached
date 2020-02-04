@@ -69,17 +69,17 @@ func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, u
 	return body, extLen, cas, nil
 }
 
-func (cmder *Commander) store(opCode uint8, key string, value interface{}, expiration uint32, cas uint64, useMsgp bool) (uint64, error) {
+func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 	r := &RequestHeader{
 		Magic:    MAGIC_REQUEST,
 		Opcode:   opCode,
-		KeyLen:   (uint16)(len(key)),
+		KeyLen:   (uint16)(len(args.Key)),
 		ExtLen:   0x00,
 		DataType: RAW_DATA,
 		Status:   0x00,
 		BodyLen:  0x00,
 		Opaque:   0x00,
-		CAS:      cas,
+		CAS:      args.CAS,
 	}
 
 	var err error
@@ -87,35 +87,35 @@ func (cmder *Commander) store(opCode uint8, key string, value interface{}, expir
 	defer req.Release()
 
 	var byteData []byte
-	if useMsgp {
+	if args.useMsgpack {
 		// type value --> raw value
-		byteData, err = msgpack.Marshal(value)
+		byteData, err = msgpack.Marshal(args.Value)
 		if err != nil {
 			return 0, err
 		}
 	} else {
-		byteData = value.([]byte)
+		byteData = args.Value.([]byte)
 	}
 
 	// extra len, key len, value len
 	r.ExtLen = 0x08
-	r.BodyLen = uint32(0x08 + len(key) + len(byteData))
+	r.BodyLen = uint32(0x08 + len(args.Key) + len(byteData))
 
 	// request header
 	writeRequestHeader(r, req)
 	// request end
 
 	// extra:8byte |----flag:4----|----expiration:4----|
-	if useMsgp {
+	if args.useMsgpack {
 		req.WriteUint32(USE_MSGP_FLAG)
 	} else {
 		req.WriteUint32(0)
 	}
-	req.WriteUint32(expiration)
+	req.WriteUint32(args.Expiration)
 	// extra end
 
 	// key
-	if _, err = req.WriteString(key); err != nil {
+	if _, err = req.WriteString(args.Key); err != nil {
 		return 0, err
 	}
 
@@ -247,25 +247,30 @@ func (cmder *Commander) delete(key string, cas uint64) error {
 	return err
 }
 
-func (cmder *Commander) append(opCode uint8, key string, value []byte, cas uint64) (uint64, error) {
+func (cmder *Commander) append(opCode uint8, args *KeyArgs) (uint64, error) {
 	r := &RequestHeader{
 		Magic:    MAGIC_REQUEST,
 		Opcode:   opCode,
-		KeyLen:   uint16(len(key)),
+		KeyLen:   uint16(len(args.Key)),
 		ExtLen:   0x00,
 		DataType: RAW_DATA,
 		Status:   0x00,
 		BodyLen:  0x00,
 		Opaque:   0x00,
-		CAS:      cas,
+		CAS:      args.CAS,
 	}
 
 	req := cmder.pool.Checkout()
 	defer req.Release()
 
-	r.BodyLen = uint32(len(key) + len(value))
+	value, ok := args.Value.([]byte)
+	if !ok {
+		return 0, ErrCommandArgumentsInvalid
+	}
+
+	r.BodyLen = uint32(len(args.Key) + len(value))
 	writeRequestHeader(r, req)
-	req.WriteString(key)
+	req.WriteString(args.Key)
 	req.Write(value)
 
 	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
@@ -277,17 +282,17 @@ func (cmder *Commander) append(opCode uint8, key string, value []byte, cas uint6
 	return modifyCAS, err
 }
 
-func (cmder *Commander) atomic(opCode uint8, key string, delta uint64, expiration uint32, cas uint64) (uint64, uint64, error) {
+func (cmder *Commander) atomic(opCode uint8, args *KeyArgs) (uint64, uint64, error) {
 	r := &RequestHeader{
 		Magic:    MAGIC_REQUEST,
 		Opcode:   opCode,
-		KeyLen:   uint16(len(key)),
+		KeyLen:   uint16(len(args.Key)),
 		ExtLen:   0x14,
 		DataType: RAW_DATA,
 		Status:   0x00,
-		BodyLen:  uint32(len(key) + 0x14),
+		BodyLen:  uint32(len(args.Key) + 0x14),
 		Opaque:   0x00,
-		CAS:      cas,
+		CAS:      args.CAS,
 	}
 
 	req := cmder.pool.Checkout()
@@ -296,13 +301,13 @@ func (cmder *Commander) atomic(opCode uint8, key string, delta uint64, expiratio
 	extData := cmder.pool.Checkout()
 	defer extData.Release()
 
-	extData.WriteUint64(delta)
+	extData.WriteUint64(args.Delta)
 	extData.WriteUint64(0x0000000000000000)
-	extData.WriteUint32(expiration)
+	extData.WriteUint32(args.Expiration)
 
 	writeRequestHeader(r, req)
 	req.Write(extData.Bytes())
-	req.WriteString(key)
+	req.WriteString(args.Key)
 
 	rawValue, extLen, cas, err := cmder.waitForResponse(req)
 	defer func() {

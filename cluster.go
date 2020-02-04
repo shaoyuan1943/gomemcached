@@ -19,8 +19,6 @@ var (
 	CommanderID     int64 = 10000
 )
 
-type ServerErrorCallback func(addr string)
-
 type Server struct {
 	Addr              string
 	VirtualHashs      []uint32
