@@ -33,7 +33,7 @@ func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, u
 		return nil, 0, 0, err
 	}
 
-	if err := cmder.flush(); err != nil {
+	if err := cmder.flush2Server(); err != nil {
 		cmder.Giveup()
 		return nil, 0, 0, err
 	}
@@ -368,6 +368,33 @@ func (cmder *Commander) touchAtomicValue(key string) (uint64, error) {
 	}
 
 	return 0, nil
+}
+
+func (cmder *Commander) flush(args *KeyArgs) error {
+	r := &RequestHeader{
+		Magic:    MAGIC_REQUEST,
+		Opcode:   OPCODE_FLUSH,
+		KeyLen:   0x00,
+		ExtLen:   0x04,
+		DataType: RAW_DATA,
+		Status:   0x00,
+		BodyLen:  0x04,
+		Opaque:   0x00,
+		CAS:      0x00,
+	}
+
+	req := cmder.pool.Checkout()
+	defer req.Release()
+
+	extData := cmder.pool.Checkout()
+	defer extData.Release()
+	extData.WriteUint32(args.Expiration)
+
+	writeRequestHeader(r, req)
+	req.Write(extData.Bytes())
+
+	_, _, _, err := cmder.waitForResponse(req)
+	return err
 }
 
 func writeRequestHeader(r *RequestHeader, b *bytepool.Bytes) {

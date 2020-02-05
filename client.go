@@ -72,4 +72,8 @@ type Client interface {
 	// Returns the current value of an atom.
 	// The error is nil when the operation is successful
 	TouchAtomicValue(key string) (uint64, error)
+
+	// Flush all items,
+	// flush the items in the cache now or some time in the future as specified by the expiration field
+	Flush(args *KeyArgs) error
 }

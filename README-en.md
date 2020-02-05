@@ -87,6 +87,9 @@ Atomic operation, the delta of the existing value is increased/decreased. If the
 **`TouchAtomicValue(key string) (uint64, error)`**    
 Returns the current value of an atom. The error is nil when the operation is successful.    
 
+**`Flush(args *KeyArgs) error`**  
+Flush all items, flush the items in the cache now or some time in the future as specified by the expiration field.    
+
 ### More
 https://github.com/memcached/memcached/wiki/BinaryProtocolRevamped
 

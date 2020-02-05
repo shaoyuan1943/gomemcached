@@ -33,7 +33,7 @@ func BenchmarkCluster_FindServerByKey(b *testing.B) {
 	cl := CreateCluster()
 	for i := 0; i < b.N; i++ {
 		key := RandString(8)
-		_, _, err := cl.ChooseServerCommand(key)
+		_, _, err := cl.ChooseServerCommanderByKey(key)
 		if err != nil {
 			b.Errorf("not found server, key: %v\n", key)
 		}
@@ -47,7 +47,7 @@ func TestCluster_FindServerByKey(t *testing.T) {
 	hitMap := make(map[string]int)
 	for i := 0; i < 3000000; i++ {
 		key := RandString(8)
-		s, _, err := cl.ChooseServerCommand(key)
+		s, _, err := cl.ChooseServerCommanderByKey(key)
 		if err != nil {
 			t.Errorf("not found server, key: %v\n", key)
 		} else {

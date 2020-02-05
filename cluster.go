@@ -184,9 +184,32 @@ func (cl *Cluster) chooseServer(key string) *Server {
 	return s
 }
 
-func (cl *Cluster) ChooseServerCommand(key string) (*Server, *Commander, error) {
-	cl.RLock()
-	defer cl.RUnlock()
+func (cl *Cluster) ChooseServerCommanderByServerAddr(addr string) (*Server, *Commander, error) {
+	cl.Lock()
+	defer cl.Unlock()
+
+	s, ok := cl.addr2Servers[addr]
+	if !ok {
+		return nil, nil, ErrInvalidArguments
+	}
+
+	var target *Commander
+	for _, cmder := range s.cmders {
+		target = cmder
+		break
+	}
+
+	if target != nil {
+		delete(s.cmders, target.ID)
+		return s, target, nil
+	}
+
+	return nil, nil, ErrNoUsableConnection
+}
+
+func (cl *Cluster) ChooseServerCommanderByKey(key string) (*Server, *Commander, error) {
+	cl.Lock()
+	defer cl.Unlock()
 
 	s := cl.chooseServer(key)
 	if s == nil {
@@ -230,6 +253,18 @@ func (cl *Cluster) AddServer2Cluster(addr string, maxConnPerServer uint32) error
 	cl.hashServer(s)
 
 	return nil
+}
+
+func (cl *Cluster) getServerAddrs() []string {
+	var addrs []string
+
+	cl.RLock()
+	defer cl.RUnlock()
+	for addr, _ := range cl.addr2Servers {
+		addrs = append(addrs, addr)
+	}
+
+	return addrs
 }
 
 func (cl *Cluster) checkClusterServerNode() {
@@ -288,4 +323,21 @@ func (cl *Cluster) doCheckHeartbeat() {
 			cmder.noop()
 		}
 	}
+}
+
+func (cl *Cluster) ForeachServer(fn func(cmder *Commander) error) error {
+	cl.Lock()
+	defer cl.Unlock()
+
+	for _, s := range cl.addr2Servers {
+		for _, cmder := range s.cmders {
+			err := fn(cmder)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	return nil
 }

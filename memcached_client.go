@@ -24,7 +24,7 @@ func (m *MemcachedClient) Exit() {
 
 func (m *MemcachedClient) exec(key string, cmdFunc func(cmder *Commander) error) error {
 	var err error
-	server, cmder, err := m.cluster.ChooseServerCommand(key)
+	server, cmder, err := m.cluster.ChooseServerCommanderByKey(key)
 	if err != nil {
 		return err
 	}
@@ -191,4 +191,29 @@ func (m *MemcachedClient) TouchAtomicValue(key string) (uint64, error) {
 	})
 
 	return value, err
+}
+
+func (m *MemcachedClient) Flush(args *KeyArgs) error {
+	addrs := m.cluster.getServerAddrs()
+	for _, addr := range addrs {
+		server, cmder, err := m.cluster.ChooseServerCommanderByServerAddr(addr)
+		if err != nil {
+			return err
+		}
+
+		err = cmder.flush(args)
+		defer func() {
+			if err == nil {
+				m.cluster.ReleaseServerCommand(server, cmder)
+			} else if _, ok := err.(*StatusError); ok {
+				m.cluster.ReleaseServerCommand(server, cmder)
+			}
+		}()
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

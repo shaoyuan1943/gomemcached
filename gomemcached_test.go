@@ -256,6 +256,63 @@ func TestCAS(t *testing.T) {
 	t.Logf("cas-->3: %v", cas)
 }
 
+func TestFlush(t *testing.T) {
+	_, err := Instance().Set(&KeyArgs{Key: "TestFlush1", Value: "yuriyiuq"})
+	if err != nil {
+		t.Fatalf("TestFlush1 err: %v", err)
+		return
+	}
+
+	_, err = Instance().Set(&KeyArgs{Key: "TestFlush2", Value: "fshjkfsjk"})
+	if err != nil {
+		t.Fatalf("TestFlush2 err: %v", err)
+		return
+	}
+
+	_, err = Instance().Set(&KeyArgs{Key: "TestFlush3", Value: "uioufsjkfjs"})
+	if err != nil {
+		t.Fatalf("TestFlush3 err: %v", err)
+		return
+	}
+
+	err = Instance().Flush(&KeyArgs{})
+	if err != nil {
+		t.Fatalf("Flush err: %v", err)
+		return
+	}
+
+	var value string
+	_, err = Instance().Get("TestFlush3", &value)
+	t.Logf("Get TestFlush3: %v, %v", value, err)
+
+	_, err = Instance().Set(&KeyArgs{Key: "TestFlush5", Value: "gdsgsdfgsd"})
+	if err != nil {
+		t.Fatalf("TestFlush2 err: %v", err)
+		return
+	}
+
+	_, err = Instance().Set(&KeyArgs{Key: "TestFlush6", Value: "gsdfgvxcvadg"})
+	if err != nil {
+		t.Fatalf("TestFlush3 err: %v", err)
+		return
+	}
+
+	err = Instance().Flush(&KeyArgs{Expiration: 10})
+	if err != nil {
+		t.Fatalf("Flush err: %v", err)
+		return
+	}
+
+	var val string
+	_, err = Instance().Get("TestFlush6", &val)
+	t.Logf("Get TestFlush6: %v, %v", val, err)
+
+	<-time.After(time.Second * 12)
+	val = ""
+	_, err = Instance().Get("TestFlush6", &val)
+	t.Logf("Get TestFlush6: %v, %v", val, err)
+}
+
 var rander *rand.Rand
 
 func GetRandomString(l int) string {

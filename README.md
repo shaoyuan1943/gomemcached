@@ -84,6 +84,9 @@ type KeyArgs struct {
 **`TouchAtomicValue(key string) (uint64, error)`**  
 返回某个原子的当前值，操作成功时error为nil。
 
+**`Flush(args *KeyArgs) error`**  
+清除所有项，当args.Expiration不为0，则表示延迟多少秒后清除。  
+
 ### 更多
 https://github.com/memcached/memcached/wiki/BinaryProtocolRevamped
 
