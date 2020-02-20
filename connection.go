@@ -15,7 +15,6 @@ func (cmder *Commander) Giveup() {
 	cmder.server.badCmders = append(cmder.server.badCmders, cmder)
 	cmder.server.cluster.badServerNoticer <- cmder.server
 }
-
 func (cmder *Commander) flush2Server() error {
 	cmder.conn.SetWriteDeadline(time.Now().Add(WriterTimeout))
 	return cmder.rw.Flush()

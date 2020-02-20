@@ -28,7 +28,7 @@ func main() {
 }
 ```
 
-### 函数说明 
+### 接口说明 
 gomemcached内部采用msgpack序列化数据，对于`MemcachedClient`而言，每一次操作都会被msgpack序列化为一个完整的数据包，理论上来说，无法对这个数据包增加或减少部分数据。当需要对数据进行增加或减少部分数据的操作时，请使用`*RawData`函数，此类函数不使用msgpack序列化value。  
 
 #### 参数

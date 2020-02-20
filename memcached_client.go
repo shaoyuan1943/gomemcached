@@ -31,9 +31,9 @@ func (m *MemcachedClient) exec(key string, cmdFunc func(cmder *Commander) error)
 
 	defer func() {
 		if err == nil {
-			m.cluster.ReleaseServerCommand(server, cmder)
+			m.cluster.ReleaseServerCommander(server, cmder)
 		} else if _, ok := err.(*StatusError); ok {
-			m.cluster.ReleaseServerCommand(server, cmder)
+			m.cluster.ReleaseServerCommander(server, cmder)
 		}
 	}()
 
@@ -204,9 +204,9 @@ func (m *MemcachedClient) Flush(args *KeyArgs) error {
 		err = cmder.flush(args)
 		defer func() {
 			if err == nil {
-				m.cluster.ReleaseServerCommand(server, cmder)
+				m.cluster.ReleaseServerCommander(server, cmder)
 			} else if _, ok := err.(*StatusError); ok {
-				m.cluster.ReleaseServerCommand(server, cmder)
+				m.cluster.ReleaseServerCommander(server, cmder)
 			}
 		}()
 
