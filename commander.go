@@ -3,6 +3,7 @@ package gomemcached
 import (
 	"bufio"
 	"encoding/binary"
+	. "github.com/valyala/bytebufferpool"
 	"net"
 	"strconv"
 	"time"
@@ -25,6 +26,22 @@ type Commander struct {
 	pool   *bytepool.Pool
 	server *Server
 	giveup bool
+
+	scratch []byte
+}
+
+func newCommander(ID int64, conn net.Conn, s *Server) *Commander {
+	return &Commander{
+		ID:   ID,
+		conn: conn,
+		rw: bufio.NewReadWriter(
+			bufio.NewReader(conn),
+			bufio.NewWriter(conn),
+		),
+		server:  s,
+		giveup:  false,
+		scratch: make([]byte, 8),
+	}
 }
 
 func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, uint8, uint64, error) {
@@ -407,4 +424,16 @@ func writeRequestHeader(r *RequestHeader, b *bytepool.Bytes) {
 	b.WriteUint32(r.BodyLen) // 8,9,10,11
 	b.WriteUint32(r.Opaque)  // 12,13,14,15
 	b.WriteUint64(r.CAS)     // 16, 23
+}
+
+func (cmder *Commander) writeRequestHeader2(r *RequestHeader, buffer *ByteBuffer) {
+	buffer.WriteByte(r.Magic)                     // 0
+	buffer.WriteByte(r.Opcode)                    // 1
+	WriteUint16(buffer, r.KeyLen, cmder.scratch)  // 2,3
+	buffer.WriteByte(r.ExtLen)                    // 4
+	buffer.WriteByte(r.DataType)                  // 5
+	WriteUint16(buffer, r.Status, cmder.scratch)  // 6,7
+	WriteUint32(buffer, r.BodyLen, cmder.scratch) // 8,9,10,11
+	WriteUint32(buffer, r.Opaque, cmder.scratch)  // 12,13,14,15
+	WriteUint64(buffer, r.CAS, cmder.scratch)     // 16, 23
 }

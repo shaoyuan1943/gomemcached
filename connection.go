@@ -2,6 +2,7 @@ package gomemcached
 
 import (
 	"fmt"
+	"github.com/valyala/bytebufferpool"
 	"io"
 	"time"
 
@@ -29,6 +30,11 @@ func (cmder *Commander) readN(b *bytepool.Bytes, n uint32) error {
 	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 	_, err := b.ReadNFrom(int64(n), cmder.rw.Reader)
 	return err
+}
+
+func (cmder *Commander) readN2(buffer *bytebufferpool.ByteBuffer) (int64, error) {
+	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
+	return buffer.ReadFrom(cmder.rw.Reader)
 }
 
 func (cmder *Commander) read(n int) ([]byte, error) {
