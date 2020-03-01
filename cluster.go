@@ -3,7 +3,6 @@ package gomemcached
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"net"
 	"sort"
 	"sync"
@@ -229,7 +228,7 @@ func (cl *Cluster) ChooseServerCommanderByKey(key string) (*Server, *Commander, 
 	return s, cmder, err
 }
 
-func (cl *Cluster) ReleaseServerCommand(s *Server, cmder *Commander) {
+func (cl *Cluster) ReleaseServerCommander(s *Server, cmder *Commander) {
 	cl.Lock()
 	defer cl.Unlock()
 
@@ -299,8 +298,6 @@ func (cl *Cluster) doCheckServer(s *Server) {
 		}
 		cl.nodeList = nodeList
 		sort.Sort(SortList(cl.nodeList))
-
-		fmt.Printf("rebuild Cluster, nodeList: %v\n", len(cl.nodeList))
 	}
 }
 
@@ -323,21 +320,4 @@ func (cl *Cluster) doCheckHeartbeat() {
 			cmder.noop()
 		}
 	}
-}
-
-func (cl *Cluster) ForeachServer(fn func(cmder *Commander) error) error {
-	cl.Lock()
-	defer cl.Unlock()
-
-	for _, s := range cl.addr2Servers {
-		for _, cmder := range s.cmders {
-			err := fn(cmder)
-			if err != nil {
-				return err
-			}
-			break
-		}
-	}
-
-	return nil
 }

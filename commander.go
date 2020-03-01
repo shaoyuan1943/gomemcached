@@ -141,6 +141,7 @@ func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 		return 0, err
 	}
 
+	// reponse
 	var modifyCAS uint64
 	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
 	defer func() {

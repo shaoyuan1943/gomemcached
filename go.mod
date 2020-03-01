@@ -1,4 +1,4 @@
-module gomemcached
+module github.com/shaoyuan1943/gomemcached
 
 go 1.13
 
