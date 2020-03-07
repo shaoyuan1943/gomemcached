@@ -34,6 +34,8 @@ func (m *MemcachedClient) exec(key string, cmdFunc func(cmder *Commander) error)
 			m.cluster.ReleaseServerCommander(server, cmder)
 		} else if _, ok := err.(*StatusError); ok {
 			m.cluster.ReleaseServerCommander(server, cmder)
+		} else {
+			cmder.Giveup()
 		}
 	}()
 
@@ -207,6 +209,8 @@ func (m *MemcachedClient) Flush(args *KeyArgs) error {
 				m.cluster.ReleaseServerCommander(server, cmder)
 			} else if _, ok := err.(*StatusError); ok {
 				m.cluster.ReleaseServerCommander(server, cmder)
+			} else {
+				cmder.Giveup()
 			}
 		}()
 

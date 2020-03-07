@@ -51,8 +51,8 @@ const (
 )
 
 const (
-	REQ_HEADER_LEN uint32 = 24
-	RSP_HEADER_LEN uint32 = 24
+	REQ_HEADER_LEN int = 24
+	RSP_HEADER_LEN int = 24
 )
 
 type RequestHeader struct {

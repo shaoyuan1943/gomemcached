@@ -26,8 +26,10 @@ var (
 	ErrInternalError           = NewStatusError(errors.New("Internal error"))
 	ErrBusy                    = NewStatusError(errors.New("Internal error"))
 	ErrTemporaryFailure        = NewStatusError(errors.New("Temporary failure"))
-	ErrUnpackTypeInvalid       = NewStatusError(errors.New("Unpack type invalid"))
+	ErrUnmarshalFailed         = NewStatusError(errors.New("Unmarshal value failed"))
+	ErrMarshalFailed           = NewStatusError(errors.New("Marshal value failed"))
 	ErrCommandArgumentsInvalid = NewStatusError(errors.New("Command arguments invalid"))
+	ErrTypeInvalid             = NewStatusError(errors.New("Type invalid"))
 )
 
 type StatusError struct {

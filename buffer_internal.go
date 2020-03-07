@@ -1,21 +1,28 @@
 package gomemcached
 
 import (
-	"encoding/binary"
 	. "github.com/valyala/bytebufferpool"
 )
 
-func WriteUint16(buffer *ByteBuffer, value uint16, scratch []byte) {
-	binary.BigEndian.PutUint16(scratch, value)
-	buffer.Write(scratch[:2])
+func WriteUint16(buffer *ByteBuffer, value uint16) {
+	buffer.WriteByte(byte(value >> 8))
+	buffer.WriteByte(byte(value))
 }
 
-func WriteUint32(buffer *ByteBuffer, value uint32, scratch []byte) {
-	binary.BigEndian.PutUint32(scratch, value)
-	buffer.Write(scratch[:4])
+func WriteUint32(buffer *ByteBuffer, value uint32) {
+	buffer.WriteByte(byte(value >> 24))
+	buffer.WriteByte(byte(value >> 16))
+	buffer.WriteByte(byte(value >> 8))
+	buffer.WriteByte(byte(value))
 }
 
-func WriteUint64(buffer *ByteBuffer, value uint64, scratch []byte) {
-	binary.BigEndian.PutUint64(scratch, value)
-	buffer.Write(scratch)
+func WriteUint64(buffer *ByteBuffer, value uint64) {
+	buffer.WriteByte(byte(value >> 56))
+	buffer.WriteByte(byte(value >> 48))
+	buffer.WriteByte(byte(value >> 40))
+	buffer.WriteByte(byte(value >> 32))
+	buffer.WriteByte(byte(value >> 24))
+	buffer.WriteByte(byte(value >> 16))
+	buffer.WriteByte(byte(value >> 8))
+	buffer.WriteByte(byte(value))
 }

@@ -1,16 +1,17 @@
 package gomemcached
 
 import (
-	"fmt"
-	"github.com/valyala/bytebufferpool"
 	"io"
 	"time"
 
-	"github.com/karlseguin/bytepool"
+	"github.com/valyala/bytebufferpool"
 )
 
 func (cmder *Commander) Giveup() {
-	fmt.Printf("something wrong with this connection: %v\n", cmder.ID)
+	if cmder.giveup {
+		return
+	}
+
 	cmder.conn.Close()
 	cmder.giveup = true
 	cmder.server.badCmders = append(cmder.server.badCmders, cmder)
@@ -21,29 +22,32 @@ func (cmder *Commander) flush2Server() error {
 	return cmder.rw.Flush()
 }
 
-func (cmder *Commander) readN(b *bytepool.Bytes, n uint32) error {
-	if n <= 0 {
-		return ErrInvalidArguments
+func (cmder *Commander) readN(buffer *bytebufferpool.ByteBuffer, count int) (int, error) {
+	if count <= 0 {
+		return 0, ErrInvalidArguments
 	}
 
 	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	_, err := b.ReadNFrom(int64(n), cmder.rw.Reader)
-	return err
+	start := len(buffer.B)
+	max := cap(buffer.B)
+	if max == 0 {
+		max = count
+		buffer.B = make([]byte, max)
+	} else {
+		if max-start < count {
+			newBytes := make([]byte, max+count)
+			copy(newBytes, buffer.B)
+			buffer.B = newBytes
+		} else {
+			buffer.B = buffer.B[:max]
+		}
+	}
+
+	n, err := io.ReadFull(cmder.rw, buffer.B[start:start+count])
+	return n, err
 }
 
-func (cmder *Commander) readN2(buffer *bytebufferpool.ByteBuffer) (int64, error) {
-	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	return buffer.ReadFrom(cmder.rw.Reader)
-}
-
-func (cmder *Commander) read(n int) ([]byte, error) {
-	cmder.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-	recv := make([]byte, n)
-	_, err := io.ReadFull(cmder.rw.Reader, recv)
-	return recv, err
-}
-
-func (cmder *Commander) write(b *bytepool.Bytes) error {
-	_, err := cmder.rw.Write(b.Bytes())
+func (cmder *Commander) write(buffer *bytebufferpool.ByteBuffer) error {
+	_, err := cmder.rw.Write(buffer.Bytes())
 	return err
 }

@@ -3,10 +3,11 @@ package gomemcached
 import (
 	"bufio"
 	"encoding/binary"
-	. "github.com/valyala/bytebufferpool"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/valyala/bytebufferpool"
 
 	"github.com/vmihailenco/msgpack/v4"
 
@@ -26,8 +27,6 @@ type Commander struct {
 	pool   *bytepool.Pool
 	server *Server
 	giveup bool
-
-	scratch []byte
 }
 
 func newCommander(ID int64, conn net.Conn, s *Server) *Commander {
@@ -38,48 +37,42 @@ func newCommander(ID int64, conn net.Conn, s *Server) *Commander {
 			bufio.NewReader(conn),
 			bufio.NewWriter(conn),
 		),
-		server:  s,
-		giveup:  false,
-		scratch: make([]byte, 8),
+		server: s,
+		giveup: false,
 	}
 }
 
-func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, uint8, uint64, error) {
+func (cmder *Commander) wait4Rsp(req *bytebufferpool.ByteBuffer) (*bytebufferpool.ByteBuffer, uint8, uint64, error) {
 	if err := cmder.write(req); err != nil {
-		cmder.Giveup()
 		return nil, 0, 0, err
 	}
 
 	if err := cmder.flush2Server(); err != nil {
-		cmder.Giveup()
 		return nil, 0, 0, err
 	}
 
-	rsp := cmder.pool.Checkout()
-	defer rsp.Release()
+	rsp := bytebufferpool.Get()
+	defer bytebufferpool.Put(rsp)
 
-	if err := cmder.readN(rsp, RSP_HEADER_LEN); err != nil {
-		cmder.Giveup()
+	rsp.Reset()
+	if _, err := cmder.readN(rsp, RSP_HEADER_LEN); err != nil {
 		return nil, 0, 0, err
 	}
 
-	b := rsp.Bytes()
-	extLen := b[4]
-	status := binary.BigEndian.Uint16(b[6:8])
-	bodyLen := binary.BigEndian.Uint32(b[8:12])
-	cas := binary.BigEndian.Uint64(b[16:24])
+	extLen := rsp.B[4]
+	status := binary.BigEndian.Uint16(rsp.B[6:8])
+	bodyLen := binary.BigEndian.Uint32(rsp.B[8:12])
+	cas := binary.BigEndian.Uint64(rsp.B[16:24])
 
-	body := cmder.pool.Checkout()
+	body := bytebufferpool.Get()
 	if bodyLen > 0 {
-		if err := cmder.readN(body, bodyLen); err != nil {
-			cmder.Giveup()
-			body.Release()
+		if _, err := cmder.readN(body, (int)(bodyLen)); err != nil {
+			bytebufferpool.Put(body)
 			return nil, 0, 0, err
 		}
 	}
 
 	if err := checkStatus(status); err != nil {
-		body.Release()
 		return nil, 0, 0, err
 	}
 
@@ -87,66 +80,43 @@ func (cmder *Commander) waitForResponse(req *bytepool.Bytes) (*bytepool.Bytes, u
 }
 
 func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   opCode,
-		KeyLen:   (uint16)(len(args.Key)),
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  0x00,
-		Opaque:   0x00,
-		CAS:      args.CAS,
-	}
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
+	var rawValue []byte
 	var err error
-	req := cmder.pool.Checkout()
-	defer req.Release()
-
-	var byteData []byte
 	if args.useMsgpack {
 		// type value --> raw value
-		byteData, err = msgpack.Marshal(args.Value)
+		rawValue, err = msgpack.Marshal(args.Value)
 		if err != nil {
-			return 0, err
+			return 0, ErrMarshalFailed
 		}
 	} else {
-		byteData = args.Value.([]byte)
+		rawValue = args.Value.([]byte)
 	}
 
-	// extra len, key len, value len
-	r.ExtLen = 0x08
-	r.BodyLen = uint32(0x08 + len(args.Key) + len(byteData))
-
 	// request header
-	writeRequestHeader(r, req)
-	// request end
+	writeReqHeader(req, MAGIC_REQUEST, opCode, (uint16)(len(args.Key)), 0x08, RAW_DATA, 0x00,
+		uint32(0x08+len(args.Key)+len(rawValue)), 0x00, args.CAS)
 
 	// extra:8byte |----flag:4----|----expiration:4----|
 	if args.useMsgpack {
-		req.WriteUint32(USE_MSGP_FLAG)
+		WriteUint32(req, (uint32)(USE_MSGP_FLAG))
 	} else {
-		req.WriteUint32(0)
+		WriteUint32(req, 0)
 	}
-	req.WriteUint32(args.Expiration)
+	WriteUint32(req, args.Expiration)
 	// extra end
 
 	// key
-	if _, err = req.WriteString(args.Key); err != nil {
-		return 0, err
-	}
-
+	req.WriteString(args.Key)
 	// value
-	if _, err = req.Write(byteData); err != nil {
-		return 0, err
-	}
+	req.Write(rawValue)
 
-	// reponse
-	var modifyCAS uint64
-	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
+	body, _, modifyCAS, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
 
@@ -154,57 +124,39 @@ func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 }
 
 func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   OPCODE_GET,
-		KeyLen:   (uint16)(len(key)),
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  (uint32)(len(key)),
-		Opaque:   0x00,
-		CAS:      0x00,
-	}
-
-	req := cmder.pool.Checkout()
-	defer req.Release()
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
 	// request header
-	writeRequestHeader(r, req)
+	writeReqHeader(req, MAGIC_REQUEST, OPCODE_GET, (uint16)(len(key)), 0x00, RAW_DATA, 0x00,
+		(uint32)(len(key)), 0x00, 0x00)
 	// key
-	if _, err := req.WriteString(key); err != nil {
-		return 0, err
-	}
+	req.WriteString(key)
 
 	// flush to memcached server
-	rawValue, extLen, cas, err := cmder.waitForResponse(req)
+	body, extLen, cas, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
-
 	if err != nil {
 		return 0, err
 	}
 
-	if rawValue == nil {
-		return cas, nil
-	}
-
-	flag := binary.BigEndian.Uint32(rawValue.Bytes()[:extLen])
+	flag := binary.BigEndian.Uint32(body.Bytes()[:extLen])
 	if flag == USE_MSGP_FLAG {
-		err = msgpack.Unmarshal(rawValue.Bytes()[extLen:], value)
+		err = msgpack.Unmarshal(body.Bytes()[extLen:], value)
 		if err != nil {
-			return 0, err
+			return 0, ErrUnmarshalFailed
 		}
 	} else {
 		switch value.(type) {
 		case *[]byte:
 			v := value.(*[]byte)
-			*v = append((*v), rawValue.Bytes()[extLen:]...)
+			*v = append((*v), body.Bytes()[extLen:]...)
 		default:
-			return 0, ErrUnpackTypeInvalid
+			return 0, ErrTypeInvalid
 		}
 	}
 
@@ -212,125 +164,94 @@ func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
 }
 
 func (cmder *Commander) noop() error {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   OPCODE_NOOP,
-		KeyLen:   0x00,
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  0x00,
-		Opaque:   0x00,
-		CAS:      0x00,
-	}
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
-	req := cmder.pool.Checkout()
-	defer req.Release()
+	// request header
+	writeReqHeader(req, MAGIC_REQUEST, OPCODE_NOOP, 0x00, 0x00, RAW_DATA, 0x00,
+		0x00, 0x00, 0x00)
 
-	writeRequestHeader(r, req)
-	rawValue, _, _, err := cmder.waitForResponse(req)
+	body, _, _, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
+
 	return err
 }
 
 func (cmder *Commander) delete(key string, cas uint64) error {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   OPCODE_DEL,
-		KeyLen:   uint16(len(key)),
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  uint32(len(key)),
-		Opaque:   0x00,
-		CAS:      0x00,
-	}
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
-	req := cmder.pool.Checkout()
-	defer req.Release()
 	// request header
-	writeRequestHeader(r, req)
-	// body: key
+	writeReqHeader(req, MAGIC_REQUEST, OPCODE_DEL, uint16(len(key)), 0x00, RAW_DATA, 0x00,
+		uint32(len(key)), 0x00, 0x00)
+
+	// key
 	req.WriteString(key)
-	rawValue, _, _, err := cmder.waitForResponse(req)
+
+	body, _, _, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
+
 	return err
 }
 
 func (cmder *Commander) append(opCode uint8, args *KeyArgs) (uint64, error) {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   opCode,
-		KeyLen:   uint16(len(args.Key)),
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  0x00,
-		Opaque:   0x00,
-		CAS:      args.CAS,
-	}
-
-	req := cmder.pool.Checkout()
-	defer req.Release()
-
 	value, ok := args.Value.([]byte)
 	if !ok {
 		return 0, ErrCommandArgumentsInvalid
 	}
 
-	r.BodyLen = uint32(len(args.Key) + len(value))
-	writeRequestHeader(r, req)
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
+
+	// request header
+	writeReqHeader(req, MAGIC_REQUEST, opCode, uint16(len(args.Key)), 0x00, RAW_DATA, 0x00,
+		uint32(len(args.Key)+len(value)), 0x00, args.CAS)
+	// key
 	req.WriteString(args.Key)
+	// value
 	req.Write(value)
 
-	rawValue, _, modifyCAS, err := cmder.waitForResponse(req)
+	body, _, modifyCAS, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
+
 	return modifyCAS, err
 }
 
 func (cmder *Commander) atomic(opCode uint8, args *KeyArgs) (uint64, uint64, error) {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   opCode,
-		KeyLen:   uint16(len(args.Key)),
-		ExtLen:   0x14,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  uint32(len(args.Key) + 0x14),
-		Opaque:   0x00,
-		CAS:      args.CAS,
-	}
+	extData := bytebufferpool.Get()
+	defer bytebufferpool.Put(extData)
 
-	req := cmder.pool.Checkout()
-	defer req.Release()
+	WriteUint64(extData, args.Delta)
+	WriteUint64(extData, 0x0000000000000000)
+	WriteUint32(extData, args.Expiration)
 
-	extData := cmder.pool.Checkout()
-	defer extData.Release()
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
-	extData.WriteUint64(args.Delta)
-	extData.WriteUint64(0x0000000000000000)
-	extData.WriteUint32(args.Expiration)
-
-	writeRequestHeader(r, req)
+	// request header
+	writeReqHeader(req, MAGIC_REQUEST, opCode, uint16(len(args.Key)), 0x14, RAW_DATA, 0x00,
+		uint32(len(args.Key)+0x14), 0x00, args.CAS)
+	// ext data
 	req.Write(extData.Bytes())
+	// key
 	req.WriteString(args.Key)
 
-	rawValue, extLen, cas, err := cmder.waitForResponse(req)
+	body, extLen, cas, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
 
@@ -338,103 +259,77 @@ func (cmder *Commander) atomic(opCode uint8, args *KeyArgs) (uint64, uint64, err
 		return 0, 0, err
 	}
 
-	atomicValue := binary.BigEndian.Uint64(rawValue.Bytes()[extLen:])
+	atomicValue := binary.BigEndian.Uint64(body.Bytes()[extLen:])
 	return atomicValue, cas, err
 }
 
 func (cmder *Commander) touchAtomicValue(key string) (uint64, error) {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   OPCODE_GET,
-		KeyLen:   (uint16)(len(key)),
-		ExtLen:   0x00,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  (uint32)(len(key)),
-		Opaque:   0x00,
-		CAS:      0x00,
-	}
-
-	req := cmder.pool.Checkout()
-	defer req.Release()
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
 	// request header
-	writeRequestHeader(r, req)
-	// key
-	if _, err := req.WriteString(key); err != nil {
-		return 0, err
-	}
+	writeReqHeader(req, MAGIC_REQUEST, OPCODE_GET, (uint16)(len(key)), 0x00, RAW_DATA, 0x00,
+		(uint32)(len(key)), 0x00, 0x00)
 
-	// flush to memcached server
-	rawValue, extLen, _, err := cmder.waitForResponse(req)
+	// key
+	req.WriteString(key)
+
+	body, extLen, _, err := cmder.wait4Rsp(req)
 	defer func() {
-		if rawValue != nil {
-			rawValue.Release()
+		if body != nil {
+			bytebufferpool.Put(body)
 		}
 	}()
+
 	if err != nil {
 		return 0, err
 	}
 
-	if rawValue != nil {
-		value, err := strconv.Atoi(string(rawValue.Bytes()[extLen:]))
-		if err != nil {
-			return 0, err
-		}
-
-		return uint64(value), nil
+	value, err := strconv.Atoi(string(body.Bytes()[extLen:]))
+	if err != nil {
+		return 0, err
 	}
 
-	return 0, nil
+	return uint64(value), nil
 }
 
 func (cmder *Commander) flush(args *KeyArgs) error {
-	r := &RequestHeader{
-		Magic:    MAGIC_REQUEST,
-		Opcode:   OPCODE_FLUSH,
-		KeyLen:   0x00,
-		ExtLen:   0x04,
-		DataType: RAW_DATA,
-		Status:   0x00,
-		BodyLen:  0x04,
-		Opaque:   0x00,
-		CAS:      0x00,
-	}
+	req := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
 
-	req := cmder.pool.Checkout()
-	defer req.Release()
+	extData := bytebufferpool.Get()
+	defer bytebufferpool.Put(req)
+	WriteUint32(extData, args.Expiration)
 
-	extData := cmder.pool.Checkout()
-	defer extData.Release()
-	extData.WriteUint32(args.Expiration)
-
-	writeRequestHeader(r, req)
+	// header
+	writeReqHeader(req, MAGIC_REQUEST, OPCODE_FLUSH, 0x00, 0x04, RAW_DATA, 0x00,
+		0x04, 0x00, 0x00)
+	// ext data
 	req.Write(extData.Bytes())
 
-	_, _, _, err := cmder.waitForResponse(req)
+	body, _, _, err := cmder.wait4Rsp(req)
+	defer func() {
+		if body != nil {
+			bytebufferpool.Put(body)
+		}
+	}()
+
 	return err
 }
 
-func writeRequestHeader(r *RequestHeader, b *bytepool.Bytes) {
-	b.WriteByte(r.Magic)     // 0
-	b.WriteByte(r.Opcode)    // 1
-	b.WriteUint16(r.KeyLen)  // 2,3
-	b.WriteByte(r.ExtLen)    // 4
-	b.WriteByte(r.DataType)  // 5
-	b.WriteUint16(r.Status)  // 6,7
-	b.WriteUint32(r.BodyLen) // 8,9,10,11
-	b.WriteUint32(r.Opaque)  // 12,13,14,15
-	b.WriteUint64(r.CAS)     // 16, 23
-}
+func writeReqHeader(buffer *bytebufferpool.ByteBuffer, magic uint8, opcode uint8, keyLen uint16,
+	extLen uint8, dataType uint8, status uint16, bodyLen uint32, opaque uint32, cas uint64) {
+	if buffer == nil {
+		panic("target buffer invalid")
+	}
 
-func (cmder *Commander) writeRequestHeader2(r *RequestHeader, buffer *ByteBuffer) {
-	buffer.WriteByte(r.Magic)                     // 0
-	buffer.WriteByte(r.Opcode)                    // 1
-	WriteUint16(buffer, r.KeyLen, cmder.scratch)  // 2,3
-	buffer.WriteByte(r.ExtLen)                    // 4
-	buffer.WriteByte(r.DataType)                  // 5
-	WriteUint16(buffer, r.Status, cmder.scratch)  // 6,7
-	WriteUint32(buffer, r.BodyLen, cmder.scratch) // 8,9,10,11
-	WriteUint32(buffer, r.Opaque, cmder.scratch)  // 12,13,14,15
-	WriteUint64(buffer, r.CAS, cmder.scratch)     // 16, 23
+	buffer.WriteByte(magic)      // 0
+	buffer.WriteByte(opcode)     // 1
+	WriteUint16(buffer, keyLen)  // 2,3
+	buffer.WriteByte(extLen)     // 4
+	buffer.WriteByte(dataType)   // 5
+	WriteUint16(buffer, status)  // 6,7
+	WriteUint32(buffer, bodyLen) // 8,9,10,11
+	WriteUint32(buffer, opaque)  // 12,13,14,15
+	WriteUint64(buffer, cas)     // 16, 23
 }
