@@ -9,8 +9,6 @@ import (
 
 	"github.com/valyala/bytebufferpool"
 
-	"github.com/vmihailenco/msgpack/v4"
-
 	"github.com/karlseguin/bytepool"
 )
 
@@ -87,7 +85,9 @@ func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 	var err error
 	if args.useMsgpack {
 		// type value --> raw value
-		rawValue, err = msgpack.Marshal(args.Value)
+		encoder := getEncoder()
+		defer putEncoder(encoder)
+		rawValue, err = encoder.Encode(args.Value)
 		if err != nil {
 			return 0, ErrMarshalFailed
 		}
@@ -146,7 +146,9 @@ func (cmder *Commander) get(key string, value interface{}) (uint64, error) {
 
 	flag := binary.BigEndian.Uint32(body.Bytes()[:extLen])
 	if flag == USE_MSGP_FLAG {
-		err = msgpack.Unmarshal(body.Bytes()[extLen:], value)
+		decoder := getDecoder()
+		defer putDecoder(decoder)
+		err = decoder.Decode(body.Bytes()[extLen:], value)
 		if err != nil {
 			return 0, ErrUnmarshalFailed
 		}
