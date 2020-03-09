@@ -81,12 +81,12 @@ func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 	req := bytebufferpool.Get()
 	defer bytebufferpool.Put(req)
 
+	var encoder Encoder
 	var rawValue []byte
 	var err error
 	if args.useMsgpack {
 		// type value --> raw value
-		encoder := getEncoder()
-		defer putEncoder(encoder)
+		encoder = getEncoder()
 		rawValue, err = encoder.Encode(args.Value)
 		if err != nil {
 			return 0, ErrMarshalFailed
@@ -112,6 +112,10 @@ func (cmder *Commander) store(opCode uint8, args *KeyArgs) (uint64, error) {
 	req.WriteString(args.Key)
 	// value
 	req.Write(rawValue)
+
+	if encoder != nil {
+		putEncoder(encoder)
+	}
 
 	body, _, modifyCAS, err := cmder.wait4Rsp(req)
 	defer func() {
