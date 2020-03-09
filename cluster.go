@@ -259,7 +259,7 @@ func (cl *Cluster) getServerAddrs() []string {
 
 	cl.RLock()
 	defer cl.RUnlock()
-	for addr, _ := range cl.addr2Servers {
+	for addr := range cl.addr2Servers {
 		addrs = append(addrs, addr)
 	}
 
